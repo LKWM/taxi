@@ -92,7 +92,7 @@
         }
         @media (min-width: 640px) { /* sm: */
              .feedback-message {
-                font-size: 1rem; /* text-base */
+                 font-size: 1rem; /* text-base */
              }
         }
     </style>
@@ -110,21 +110,21 @@
         <!-- [수정] Pratique 파일과 동일한 하단 바로 교체 -->
         <div id="navigation" class="nav-container">
              <div class="justify-self-start">
-                <button id="prev-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">Précédent</button>
-            </div>
+                 <button id="prev-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">Précédent</button>
+             </div>
             
-            <div class="flex-grow sm:flex-grow-0 sm:w-1/2 h-2 bg-yellow-600 rounded-full overflow-hidden mx-2">
-                <div id="progress-indicator" class="h-full bg-white transition-all duration-300"></div>
-            </div>
+             <div class="flex-grow sm:flex-grow-0 sm:w-1/2 h-2 bg-yellow-600 rounded-full overflow-hidden mx-2">
+                 <div id="progress-indicator" class="h-full bg-white transition-all duration-300"></div>
+             </div>
             
-            <div class="justify-self-end flex gap-2">
-                <!-- [추가] 재시도/넘어가기 버튼 -->
-                <button id="retry-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Réessayer</button>
-                <button id="passer-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Passer</button>
-                <button id="next-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">
-                    Suivant
-                </button>
-            </div>
+             <div class="justify-self-end flex gap-2">
+                 <!-- [추가] 재시도/넘어가기 버튼 -->
+                 <button id="retry-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Réessayer</button>
+                 <button id="passer-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Passer</button>
+                 <button id="next-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">
+                     Suivant
+                 </button>
+             </div>
         </div>
     </div>
 
@@ -183,23 +183,24 @@
             
             // Page Data
             const pages = [
+                // [수정] 프랑스어 설명 오디오(audioFr) 플레이스홀더 추가
                 { type: 'text', title: 'Leçon 1: Prendre un Taxi', content: 'Apprenez les expressions coréennes essentielles pour trouver et prendre un taxi en Corée. Appuyez sur "Suivant" pour commencer !' },
-                { type: 'text', title: 'Leçon 1', content: 'Bonjour ! Dans cette leçon, on va apprendre où et comment attraper un taxi. Les taxis en Corée sont orange, blancs ou gris. Il y a aussi des taxis noirs, <모범택시>, qui offrent un service de luxe avec un prix élevé. Alors, comment dire « J’attrape un taxi » en coréen ?' },
+                { type: 'text', content: 'Bonjour ! Dans cette leçon, on va apprendre où et comment attraper un taxi. Les taxis en Corée sont orange, blancs ou gris. Il y a aussi des taxis noirs, qui offrent un service de luxe avec un prix élevé. Alors, comment dire « J’attrape un taxi » en coréen ?', audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763146907/lec%CC%A7on1-clip1_c7brba.mp3' },
                 { type: 'vocab', ko: '택시를 잡아요', fr: 'J’attrape un taxi.', audio: 'https://static.wixstatic.com/mp3/699687_a6bee72e0e69437cb5c7cdd8d2f2bc25.mp3' },
                 { type: 'vocab', ko: '택시를 잡아요', fr: 'J’attrape un taxi.', audio: 'https://static.wixstatic.com/mp3/699687_a6bee72e0e69437cb5c7cdd8d2f2bc25.mp3', subtitle: 'Répétez encore une fois' },
-                { type: 'text_with_vocab', ko: '택시를 잡아요', fr: 'J’attrape un taxi.', audio: 'https://static.wixstatic.com/mp3/699687_a6bee72e0e69437cb5c7cdd8d2f2bc25.mp3', content: 'Très bien ! Les Coréens utilisent plutôt des applications comme Kakao ou Tada pour appeler un taxi, mais en tant que voyageur, ça peut être difficile de se connecter sans numéro de téléphone coréen.' },
-                { type: 'text', content: 'Alors, apprenons quelques mots utiles pour chercher/attraper un taxi.' },
+                { type: 'text_with_vocab', ko: '택시를 잡아요', fr: 'J’attrape un taxi.', audio: 'https://static.wixstatic.com/mp3/699687_a6bee72e0e69437cb5c7cdd8d2f2bc25.mp3', content: 'Très bien ! Les Coréens utilisent plutôt des applications comme Kakao ou Tada pour appeler un taxi, mais en tant que voyageur, ça peut être difficile de se connecter sans numéro de téléphone coréen.', audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763148966/lec%CC%A7on1-clip2_x6k2aa.mp3' },
+                { type: 'text', content: 'Alors, apprenons quelques mots utiles pour chercher/attraper un taxi.', audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763149060/lecon1-clip3_hirrkq.mp3' },
                 { type: 'vocab', ko: '택시 승강장', fr: 'L’arrêt de taxi', audio: 'https://static.wixstatic.com/mp3/699687_71db107dd6a24fc6adcbd7b23da7944a.mp3' },
-                { type: 'text_with_vocab', ko: '택시 승강장', fr: 'L’arrêt de taxi', audio: 'https://static.wixstatic.com/mp3/699687_71db107dd6a24fc6adcbd7b23da7944a.mp3', content: 'Si vous êtes sur une grande route où il y a beaucoup de trafic, ou bien à l’aéroport ou à la gare, on ne vous autorise pas à arrêter un taxi pour éviter de bloquer la circulation. Dans ce cas, il faut aller à <택시 승강장> pour chercher un taxi.' },
+                { type: 'text_with_vocab', ko: '택시 승강장', fr: 'L’arrêt de taxi', audio: 'https://static.wixstatic.com/mp3/699687_71db107dd6a24fc6adcbd7b23da7944a.mp3', content: 'Si vous êtes sur une grande route où il y a beaucoup de trafic, ou bien à l’aéroport ou à la gare, on ne vous autorise pas à arrêter un taxi pour éviter de bloquer la circulation. Dans ce cas, il faut aller à <택시 승강장> pour chercher un taxi.', audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763149178/lec%CC%A7on1-clip4_gxrmet.mp3' },
                 { type: 'vocab', ko: '빈차', fr: 'Voiture vide', image: 'https://static.wixstatic.com/media/699687_9cb2a5884355485c94cd4de8c24479e4~mv2.jpg', audio: 'https://static.wixstatic.com/mp3/699687_6d12ea0ec14f4bfcb861184c445fd657.mp3' },
-                { type: 'text_with_vocab', ko: '빈차', fr: 'Voiture vide', audio: 'https://static.wixstatic.com/mp3/699687_6d12ea0ec14f4bfcb861184c445fd657.mp3', content: 'Si vous voulez prendre un taxi, il faut chercher la voiture sur laquelle est marqué <빈차>, ce qui veut dire que la voiture est vacante.' },
+                { type: 'text_with_vocab', ko: '빈차', fr: 'Voiture vide', audio: 'https://static.wixstatic.com/mp3/699687_6d12ea0ec14f4bfcb861184c445fd657.mp3', content: 'Si vous voulez prendre un taxi, il faut chercher la voiture sur laquelle est marqué <빈차>, ce qui veut dire que la voiture est vacante.', audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763149264/lec%CC%A7on1-clip5_au8cda.mp3' },
                 { type: 'vocab', ko: '예약', fr: 'Réservé', image: 'https://static.wixstatic.com/media/699687_002626312015436c8e312808bc179072~mv2.jpg', audio: 'https://static.wixstatic.com/mp3/699687_3ba4f1a4abcc4619935a07c62dc13d66.mp3' },
-                { type: 'text_with_vocab', ko: '예약', fr: 'Réservé', audio: 'https://static.wixstatic.com/mp3/699687_3ba4f1a4abcc4619935a07c62dc13d66.mp3', content: 'S’il est marqué <예약>, cela veut dire que le taxi est déjà réservé et n’accepte pas de clients en chemin.' },
+                { type: 'text_with_vocab', ko: '예약', fr: 'Réservé', audio: 'https://static.wixstatic.com/mp3/699687_3ba4f1a4abcc4619935a07c62dc13d66.mp3', content: 'S’il est marqué <예약>, cela veut dire que le taxi est déjà réservé et n’accepte pas de clients en chemin.', audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763149326/lec%CC%A7on1-clip6_l6ovvh.mp3' },
                 { type: 'vocab', ko: '휴무', fr: 'Congé', image: 'https://static.wixstatic.com/media/699687_497a92976c474010a886e2f0865d5c74~mv2.png', audio: 'https://static.wixstatic.com/mp3/699687_a77a164055b94c179643ce01165486db.mp3' },
-                { type: 'text_with_vocab', ko: '휴무', fr: 'Congé', audio: 'https://static.wixstatic.com/mp3/699687_a77a164055b94c179643ce01165486db.mp3', content: 'Les chauffeurs privés peuvent utiliser la voiture pour une affaire personnelle.' },
+                { type: 'text_with_vocab', ko: '휴무', fr: 'Congé', audio: 'https://static.wixstatic.com/mp3/699687_a77a164055b94c179643ce01165486db.mp3', content: 'Les chauffeurs privés peuvent utiliser la voiture pour une affaire personnelle.', audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763149369/lec%CC%A7on1-clip7_owljdg.mp3' },
                 { type: 'quiz', question: 'Où devez-vous aller pour prendre un taxi ?', options: [{ ko: '버스 정류장', fr: 'Arrêt de bus' }, { ko: '택시 승강장', fr: 'Arrêt de taxi' }, { ko: '기차역', fr: 'Gare' }], correct: 1 },
                 { type: 'quiz', question: 'Quelle marque de taxi pouvez-vous prendre sans réservation ?', options: [{ ko: '휴무', fr: 'Congé' }, { ko: '예약', fr: 'Réservé' }, { ko: '빈차', fr: 'Voiture vide' }], correct: 2 },
-                { type: 'text', title: 'Félicitations !', content: 'Très bien ! Vous pouvez maintenant identifier où et quel taxi prendre quand vous voyagez en Corée !' }
+                { type: 'text', title: 'Félicitations !', content: 'Très bien ! Vous pouvez maintenant identifier où et quel taxi prendre quand vous voyagez en Corée !', audioFr: 'URL_PLACEHOLDER_FR_PAGE_16' }
             ];
             
             const totalPages = pages.length;
@@ -277,6 +278,7 @@
                 const quiz = pages[quizIndex];
                 const feedbackEl = document.querySelector(`#speech-status-${quizIndex}`);
                 const micBtn = document.querySelector(`#mic-btn-${quizIndex}`);
+                const attemptsEl = document.querySelector(`#attempts-${quizIndex}`); // [추가]
                 
                 if (attempts[quizIndex] === undefined) attempts[quizIndex] = 0;
                 attempts[quizIndex]++;
@@ -313,7 +315,7 @@
                     const isScorePass = score >= 80; // [요청 사항] 80점 컷
                     
                     const isCorrect = isTextMatch && isScorePass; 
-     
+    
                     if (isCorrect) {
                         scores[quizIndex] = 1; // 1 = 통과
                         correctSound?.triggerAttackRelease('C5', '0.2s');
@@ -323,23 +325,26 @@
                             feedbackEl.textContent = `Très bien ! "${transcribedText}" (Score: ${score} / 100)`;
                             feedbackEl.className = 'speech-status-indicator feedback-message text-center text-green-600';
                         }
+                        if(attemptsEl) attemptsEl.textContent = 'Terminé !'; // [추가]
                     } else {
                         if (isFirstAttempt) {
                             scores[quizIndex] = null; // 재시도 기회
                             wrongSound?.triggerAttackRelease('A#2', '0.2s');
                             if(feedbackEl) {
-                                 // [요청 사항] 텍스트 필드 추가 대신, 피드백에 인식된 텍스트 포함
-                                 feedbackEl.textContent = `J'ai entendu : "${transcribedText || '...'}" (Score: ${score}). Écoutez et parlez à nouveau.`; 
-                                 feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                                //[요청 사항] 텍스트 필드 추가 대신, 피드백에 인식된 텍스트 포함
+                                feedbackEl.textContent = `J'ai entendu : "${transcribedText || '...'}" (Score: ${score}). Écoutez et parlez à nouveau.`; 
+                                feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
                             }
+                            if(attemptsEl) attemptsEl.textContent = 'Tentatives restantes : 1'; // [추가]
                         } else {
                             scores[quizIndex] = 0; // 최종 실패
                             wrongSound?.triggerAttackRelease('A#2', '0.2s');
                             if(feedbackEl) {
-                                 feedbackEl.textContent = `Réponse: "${quiz.ko}" (Votre score: ${score} / 100)`;
-                                 feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                                feedbackEl.textContent = `Réponse: "${quiz.ko}" (Votre score: ${score} / 100)`;
+                                feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
                             }
                             if(micBtn) micBtn.disabled = true;
+                            if(attemptsEl) attemptsEl.textContent = 'Tentatives épuisées.'; // [추가]
                         }
                     }
                     
@@ -461,18 +466,6 @@
                 repeatBtn.className = 'mic-btn bg-sky-500 text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-full shadow-md hover:bg-sky-600 transition duration-300 flex items-center justify-center gap-2 text-sm sm:text-base';
                 repeatBtn.innerHTML = 'Répétez <span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span>';
                 
-                repeatBtn.onclick = () => {
-                    if (repeatBtn.disabled || repeatBtn.classList.contains('loading')) return;
-                    if (!attempts[quizIndex]) attempts[quizIndex] = 0;
-                    if (attempts[quizIndex] >= 2 && scores[quizIndex] === null) return; 
-                    
-                    if (isRecording) stopRecording(quizIndex);
-                    else {
-                        initAudioSynth(); 
-                        startRecording(quizIndex);
-                    }
-                };
-                
                 speechContainer.appendChild(repeatBtn);
 
                 const speechStatus = document.createElement('p');
@@ -492,6 +485,51 @@
                 attemptsEl.className = 'text-xs sm:text-sm text-slate-400 mt-1';
                 attemptsEl.textContent = 'Tentatives restantes : 2';
                 speechContainer.appendChild(attemptsEl);
+
+                // [추가] 렌더링 시 기존 상태(시도 횟수, 점수) 복원
+                const currentAttempts = attempts[quizIndex] || 0;
+                const currentScore = scores[quizIndex];
+                
+                attemptsEl.textContent = `Tentatives restantes : ${Math.max(0, 2 - currentAttempts)}`;
+
+                if (currentScore === 1) { // 1 = 통과
+                    repeatBtn.disabled = true;
+                    speechStatus.textContent = `Très bien !`; // 간단한 성공 메시지
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-green-600';
+                    attemptsEl.textContent = 'Terminé !';
+                } else if (currentScore === 0) { // 0 = 최종 실패
+                    repeatBtn.disabled = true;
+                    speechStatus.textContent = `Réponse: "${correctKoreanText}"`; // 정답 표시
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                    attemptsEl.textContent = 'Tentatives épuisées.';
+                } else if (currentAttempts >= 2) { // 2회 시도, 아직 점수 없음 (이 경우는 0점으로 처리되어야 함)
+                    repeatBtn.disabled = true;
+                    speechStatus.textContent = `Réponse: "${correctKoreanText}"`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                    attemptsEl.textContent = 'Tentatives épuisées.';
+                    if(currentScore === null) scores[quizIndex] = 0; // 상태 동기화
+                } else if (currentAttempts === 1) { // 1회 시도, 실패 (재시도 기회)
+                    speechStatus.textContent = `Écoutez et parlez à nouveau.`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                }
+                // (currentAttempts === 0 and currentScore === null) -> 기본 상태 (아무것도 안함)
+
+
+                repeatBtn.onclick = () => {
+                    const currentAttemptsOnClick = attempts[quizIndex] || 0; // 클릭 시점의 시도 횟수 재확인
+                    if (repeatBtn.disabled || repeatBtn.classList.contains('loading')) return;
+                    
+                    // [수정] 2회 시도 제한 (scores[quizIndex] === null 조건 제거)
+                    if (currentAttemptsOnClick >= 2) {
+                        return; 
+                    }
+                    
+                    if (isRecording) stopRecording(quizIndex);
+                    else {
+                        initAudioSynth(); 
+                        startRecording(quizIndex);
+                    }
+                };
 
                 return speechContainer;
             }
@@ -515,8 +553,9 @@
                 data.options.forEach((option, index) => {
                     const optionBtn = document.createElement('button');
                     optionBtn.type = 'button'; 
-                    optionBtn.className = 'quiz-option-btn w-full bg-gray-100 text-gray-800 font-medium p-3 sm:p-4 rounded-xl shadow-sm hover:bg-gray-200 transition duration-300 text-sm sm:text-base text-left'; // [수정] text-left
-                    optionBtn.innerHTML = `<span class="font-bold text-lg">${option.ko}</span><br><span class="text-gray-600">${option.fr}</span>`; // [수정] fr 추가
+                    // [수정] text-left -> text-center, 폰트 크기 조정
+                    optionBtn.className = 'quiz-option-btn w-full bg-gray-100 text-gray-800 font-medium p-3 sm:p-4 rounded-xl shadow-sm hover:bg-gray-200 transition duration-300 text-lg sm:text-xl text-center'; 
+                    optionBtn.innerHTML = `<span class="font-bold">${option.ko}</span>`; // [수정] fr 삭제
                     optionBtn.dataset.index = index;
                     
                     optionBtn.addEventListener('click', () => {
@@ -586,23 +625,29 @@
                 const pageData = pages[currentPage];
                 const quizIndex = currentPage;
                 
-                if (pageData.type.startsWith('speech') || pageData.type === 'quiz') {
+                // [수정] 'quiz' (MCQ) 페이지만 '다음' 버튼 비활성화 로직을 적용
+                if (pageData.type === 'quiz') { 
                     const isAnswered = scores[quizIndex] !== null;
                     nextBtn.disabled = !isAnswered;
-
-                    // 2회 시도 후 0점일 때 (실패)
-                    if ((attempts[quizIndex] || 0) >= 2 && scores[quizIndex] === 0) {
-                        passerBtn.classList.remove('hidden');
-                        nextBtn.disabled = true;
-                    }
                     
-                    // MCQ 1회 실패 시 (0점)
-                    if (pageData.type === 'quiz' && scores[quizIndex] === 0) {
+                    // MCQ 1회 실패 시 (0점) 'Retry' 버튼 표시
+                    if (scores[quizIndex] === 0) { // 1회 시도 0점
                          retryBtn.classList.remove('hidden');
                          nextBtn.disabled = true;
                     }
-                } else {
-                    // 텍스트 페이지는 항상 '다음' 활성화 (마지막 페이지 제외)
+                } 
+                // [수정] 'vocab' (따라말하기) 페이지 로직
+                else if (pageData.type === 'vocab') {
+                    nextBtn.disabled = false; // [수정] 따라말하기는 '다음' 버튼을 막지 않음
+
+                    // 2회 시도 후 0점일 때 (실패) 'Passer' 버튼 표시
+                    if ((attempts[quizIndex] || 0) >= 2 && scores[quizIndex] === 0) {
+                        passerBtn.classList.remove('hidden');
+                        // '다음' 버튼은 활성 상태로 둠
+                    }
+                }
+                else {
+                    // 'text', 'text_with_vocab' 페이지는 항상 '다음' 활성화 (마지막 페이지 제외)
                     nextBtn.disabled = isLastPage;
                 }
             }
@@ -649,8 +694,8 @@
                     allOptionButtons.forEach(btn => { btn.disabled = true; });
 
                     allOptionButtons.forEach((btn, index) => {
-                        btn.innerHTML = `${pageData.options[index].ko}<br><span class="text-sm font-normal">${pageData.options[index].fr}</span>`;
-                        btn.classList.add('text-left', 'leading-snug', 'p-3', 'sm:p-4');
+                        btn.innerHTML = `<span class="font-bold">${pageData.options[index].ko}</span>`; // [수정] fr 삭제
+                        btn.classList.add('text-center', 'p-3', 'sm:p-4'); // [수정] text-left, leading-snug 삭제
                         if(index !== correctIndex) {
                             btn.classList.remove('bg-gray-100', 'hover:bg-gray-200');
                             btn.classList.add('bg-gray-200', 'text-gray-700'); 
@@ -695,7 +740,7 @@
             document.getElementById('passer-btn').addEventListener('click', () => {
                  const quizIndex = currentPage;
                  if (scores[quizIndex] === null) scores[quizIndex] = 0; 
-                 if (currentPageIndex < pages.length - 1) {
+                 if (currentPage < pages.length - 1) { // [오류 수정] currentPageIndex -> currentPage
                       currentPage++;
                       renderPage();
                  }
@@ -710,6 +755,30 @@
                 const contentEl = document.getElementById('page-content');
                 contentEl.innerHTML = ''; // 이전 내용 지우기
                 contentEl.scrollTop = 0; // 스크롤 맨 위로
+
+                // [요청] 프랑스어 설명 페이지 자동재생 오디오 추가
+                if (pageData.audioFr) {
+                    // 이전 오디오가 있다면 중지
+                    const existingAudio = document.getElementById('french-guide-audio');
+                    if (existingAudio) {
+                        existingAudio.pause();
+                        existingAudio.remove();
+                    }
+                    
+                    const audioEl = document.createElement('audio');
+                    audioEl.src = pageData.audioFr; // 플레이스홀더 URL
+                    audioEl.autoplay = true;
+                    audioEl.style.display = 'none';
+                    audioEl.id = 'french-guide-audio';
+                    
+                    // 자동재생 시도 (브라우저 정책에 따라 실패할 수 있음)
+                    audioEl.play().catch(error => {
+                        console.warn('French audio autoplay failed. This is often due to browser policy.', error);
+                    });
+                    
+                    contentEl.appendChild(audioEl);
+                }
+                // [요청 끝]
 
                 // [수정] 모바일 반응형 폰트 크기 적용
                 switch (pageData.type) {
