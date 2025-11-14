@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cours de Coréen - Taxi</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for audio synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+             overflow: hidden; /* [수정] */
+        }
+        /* Custom highlight class */
+        .highlight {
+            color: #16a34a; /* text-green-600 */
+            font-weight: 600;
+        }
+        /* [수정] 모바일/PC 꽉 차는 레이아웃으로 변경 */
+        #app-container {
+            width: 100%;
+            max-width: 1000px; /* 데스크탑 최대 너비 (Pratique 파일과 동일) */
+            background-color: #facc15; /* bg-yellow-400 */
+            border-radius: 1rem; /* rounded-2xl (Pratique 파일과 동일) */
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%; /* h-full */
+        }
+        /* [수정] Pratique 파일과 동일한 콘텐츠 영역 */
+        #page-content {
+            flex-grow: 1;
+            padding: 1.5rem; /* p-6 */
+            overflow-y: auto; /* 내용 길어지면 스크롤 */
+            padding-bottom: 8rem; /* 하단 바 높이만큼 여백 (넉넉하게) */
+        }
+        /* [추가] Pratique 파일과 동일한 마이크/네비게이션 스타일 */
+        .mic-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .mic-btn.recording {
+            transform: scale(1.1);
+            background-color: #ef4444;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4);
+        }
+        .mic-btn.loading {
+            background-color: #6b7280;
+            cursor: not-allowed;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .nav-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem;
+            background-color: #facc15; /* bg-yellow-400 */
+            border-top: 1px solid #eab308; /* yellow-500 */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+        @media (min-width: 640px) {
+            .nav-container { padding: 1.5rem; }
+            #page-content { padding-bottom: 6rem; }
+        }
+        #next-btn:disabled {
+            background-color: #9ca3af; /* gray-400 */
+            color: #e5e7eb; /* gray-200 */
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        #prev-btn:disabled {
+             opacity: 0.5;
+             cursor: not-allowed;
+        }
+        /* [추가] 퀴즈 피드백 영역 */
+        .feedback-message {
+            min-height: 2rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            font-size: 0.875rem; /* text-sm */
+        }
+        @media (min-width: 640px) { /* sm: */
+             .feedback-message {
+                font-size: 1rem; /* text-base */
+             }
+        }
+    </style>
+</head>
+<!-- [수정] 모바일/PC 꽉 차는 레이아웃으로 변경 -->
+<body class="bg-gray-100 flex items-center justify-center min-h-screen h-screen p-2 sm:p-4">
+
+    <!-- App Container -->
+    <div id="app-container">
+        <!-- Page Content: This will be dynamically rendered -->
+        <div id="page-content" class="flex flex-col justify-center">
+            <!-- Content appears here -->
+        </div>
+
+        <!-- [수정] Pratique 파일과 동일한 하단 바로 교체 -->
+        <div id="navigation" class="nav-container">
+             <div class="justify-self-start">
+                <button id="prev-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">Précédent</button>
+            </div>
+            
+            <div class="flex-grow sm:flex-grow-0 sm:w-1/2 h-2 bg-yellow-600 rounded-full overflow-hidden mx-2">
+                <div id="progress-indicator" class="h-full bg-white transition-all duration-300"></div>
+            </div>
+            
+            <div class="justify-self-end flex gap-2">
+                <!-- [추가] 재시도/넘어가기 버튼 -->
+                <button id="retry-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Réessayer</button>
+                <button id="passer-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Passer</button>
+                <button id="next-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">
+                    Suivant
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // [!!!] 수정: 'playAudio' 함수가 누락되어 전역 스코프에 추가합니다.
+        function playAudio(url) {
+            // [수정] Tone.js와 충돌 방지를 위해 HTML Audio Element 사용
+            try {
+                const audio = new Audio(url);
+                audio.play();
+            } catch (e) {
+                console.error("Error playing audio:", e);
+                const statusEl = document.querySelector('.speech-status-indicator:not(.hidden)');
+                if (statusEl) {
+                    statusEl.innerText = "Désolé, l'audio n'a pas pu être chargé.";
+                    statusEl.className = 'speech-status-indicator text-center text-red-500 mt-4';
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 1. STATE AND DATA ---
+            let currentPage = 0;
+            let scores = [];
+            let attempts = {};
+            let soundsReady = false;
+
+            // [추가] Naver API 설정
+            const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+            const CLOVA_API_FUNCTION_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+            
+            // [삭제] 기존 SpeechRecognition API 설정
+            
+            // Audio synth
+            let pageTurnSynth, correctSound, wrongSound, completionSynth;
+            if (typeof Tone !== 'undefined') {
+                pageTurnSynth = new Tone.Synth().toDestination();
+                completionSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                correctSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.2 } }).toDestination();
+                wrongSound = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0.1, release: 0.2 } }).toDestination();
+            }
+
+            const initAudioSynth = async () => {
+                if (soundsReady) return;
+                try {
+                    await Tone.start();
+                    soundsReady = true;
+                    console.log('Audio context started.');
+                } catch (e) {
+                    console.error("Audio context could not be started: ", e);
+                }
+            };
+            document.body.addEventListener('click', initAudioSynth, { once: true });
+            document.body.addEventListener('touchstart', initAudioSynth, { once: true });
+            
+            // Page Data
+            const pages = [
+                { type: 'text', title: 'Leçon 1: Prendre un Taxi', content: 'Apprenez les expressions coréennes essentielles pour trouver et prendre un taxi en Corée. Appuyez sur "Suivant" pour commencer !' },
+                { type: 'text', title: 'Leçon 1', content: 'Bonjour ! Dans cette leçon, on va apprendre où et comment attraper un taxi. Les taxis en Corée sont orange, blancs ou gris. Il y a aussi des taxis noirs, <모범택시>, qui offrent un service de luxe avec un prix élevé. Alors, comment dire « J’attrape un taxi » en coréen ?' },
+                { type: 'vocab', ko: '택시를 잡아요', fr: 'J’attrape un taxi.', audio: 'https://static.wixstatic.com/mp3/699687_a6bee72e0e69437cb5c7cdd8d2f2bc25.mp3' },
+                { type: 'vocab', ko: '택시를 잡아요', fr: 'J’attrape un taxi.', audio: 'https://static.wixstatic.com/mp3/699687_a6bee72e0e69437cb5c7cdd8d2f2bc25.mp3', subtitle: 'Répétez encore une fois' },
+                { type: 'text_with_vocab', ko: '택시를 잡아요', fr: 'J’attrape un taxi.', audio: 'https://static.wixstatic.com/mp3/699687_a6bee72e0e69437cb5c7cdd8d2f2bc25.mp3', content: 'Très bien ! Les Coréens utilisent plutôt des applications comme Kakao ou Tada pour appeler un taxi, mais en tant que voyageur, ça peut être difficile de se connecter sans numéro de téléphone coréen.' },
+                { type: 'text', content: 'Alors, apprenons quelques mots utiles pour chercher/attraper un taxi.' },
+                { type: 'vocab', ko: '택시 승강장', fr: 'L’arrêt de taxi', audio: 'https://static.wixstatic.com/mp3/699687_71db107dd6a24fc6adcbd7b23da7944a.mp3' },
+                { type: 'text_with_vocab', ko: '택시 승강장', fr: 'L’arrêt de taxi', audio: 'https://static.wixstatic.com/mp3/699687_71db107dd6a24fc6adcbd7b23da7944a.mp3', content: 'Si vous êtes sur une grande route où il y a beaucoup de trafic, ou bien à l’aéroport ou à la gare, on ne vous autorise pas à arrêter un taxi pour éviter de bloquer la circulation. Dans ce cas, il faut aller à <택시 승강장> pour chercher un taxi.' },
+                { type: 'vocab', ko: '빈차', fr: 'Voiture vide', image: 'https://static.wixstatic.com/media/699687_9cb2a5884355485c94cd4de8c24479e4~mv2.jpg', audio: 'https://static.wixstatic.com/mp3/699687_6d12ea0ec14f4bfcb861184c445fd657.mp3' },
+                { type: 'text_with_vocab', ko: '빈차', fr: 'Voiture vide', audio: 'https://static.wixstatic.com/mp3/699687_6d12ea0ec14f4bfcb861184c445fd657.mp3', content: 'Si vous voulez prendre un taxi, il faut chercher la voiture sur laquelle est marqué <빈차>, ce qui veut dire que la voiture est vacante.' },
+                { type: 'vocab', ko: '예약', fr: 'Réservé', image: 'https://static.wixstatic.com/media/699687_002626312015436c8e312808bc179072~mv2.jpg', audio: 'https://static.wixstatic.com/mp3/699687_3ba4f1a4abcc4619935a07c62dc13d66.mp3' },
+                { type: 'text_with_vocab', ko: '예약', fr: 'Réservé', audio: 'https://static.wixstatic.com/mp3/699687_3ba4f1a4abcc4619935a07c62dc13d66.mp3', content: 'S’il est marqué <예약>, cela veut dire que le taxi est déjà réservé et n’accepte pas de clients en chemin.' },
+                { type: 'vocab', ko: '휴무', fr: 'Congé', image: 'https://static.wixstatic.com/media/699687_497a92976c474010a886e2f0865d5c74~mv2.png', audio: 'https://static.wixstatic.com/mp3/699687_a77a164055b94c179643ce01165486db.mp3' },
+                { type: 'text_with_vocab', ko: '휴무', fr: 'Congé', audio: 'https://static.wixstatic.com/mp3/699687_a77a164055b94c179643ce01165486db.mp3', content: 'Les chauffeurs privés peuvent utiliser la voiture pour une affaire personnelle.' },
+                { type: 'quiz', question: 'Où devez-vous aller pour prendre un taxi ?', options: [{ ko: '버스 정류장', fr: 'Arrêt de bus' }, { ko: '택시 승강장', fr: 'Arrêt de taxi' }, { ko: '기차역', fr: 'Gare' }], correct: 1 },
+                { type: 'quiz', question: 'Quelle marque de taxi pouvez-vous prendre sans réservation ?', options: [{ ko: '휴무', fr: 'Congé' }, { ko: '예약', fr: 'Réservé' }, { ko: '빈차', fr: 'Voiture vide' }], correct: 2 },
+                { type: 'text', title: 'Félicitations !', content: 'Très bien ! Vous pouvez maintenant identifier où et quel taxi prendre quand vous voyagez en Corée !' }
+            ];
+            
+            const totalPages = pages.length;
+            scores = Array(totalPages).fill(null); 
+            
+            // [삭제] URL 수정 로직 (이미 원본 데이터에 수정됨)
+
+            // --- [추가] Naver API 연동을 위한 함수들 ---
+            let mediaRecorder;
+            let audioChunks = [];
+            let isRecording = false;
+            let recordingTimeout;
+
+            async function startRecording(quizIndex) {
+                if (isRecording) return;
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    alert("Votre navigateur ne supporte pas l'enregistrement audio.");
+                    return;
+                }
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    isRecording = true;
+                    audioChunks = [];
+                    let mimeType = 'audio/webm;codecs=opus';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/webm';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+                    
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType }); 
+                    mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+                    mediaRecorder.onstart = () => {
+                        document.querySelector(`#mic-btn-${quizIndex}`)?.classList.add('recording');
+                        document.querySelector(`#speech-status-${quizIndex}`).textContent = "J'écoute...";
+                        document.querySelector(`#speech-status-${quizIndex}`).className = 'speech-status-indicator feedback-message text-center text-gray-700';
+                        
+                        clearTimeout(recordingTimeout);
+                        recordingTimeout = setTimeout(() => { if (isRecording) stopRecording(quizIndex); }, 10000); // 10초
+                    };
+                    mediaRecorder.onstop = () => {
+                        isRecording = false;
+                        clearTimeout(recordingTimeout);
+                        document.querySelector(`#mic-btn-${quizIndex}`)?.classList.remove('recording');
+                        document.querySelector(`#mic-btn-${quizIndex}`)?.classList.add('loading');
+                        document.querySelector(`#speech-status-${quizIndex}`).textContent = "Évaluation en cours...";
+
+                        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = () => {
+                            handlePronunciationEvaluation(quizIndex, reader.result);
+                        };
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    mediaRecorder.start();
+                } catch (err) {
+                    console.error("Error starting recording:", err);
+                    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                        alert("Impossible d'accéder au microphone. Veuillez autoriser l'accès.");
+                    } else {
+                        alert(`Erreur microphone: ${err.name}. Veuillez réessayer.`);
+                    }
+                }
+            }
+
+            function stopRecording(quizIndex) {
+                clearTimeout(recordingTimeout);
+                if (mediaRecorder && isRecording) mediaRecorder.stop();
+            }
+
+            function normalizeText(text) {
+                if (typeof text !== 'string') return '';
+                return text.trim().replace(/[.,!?'\s]/g, '');
+            }
+
+            async function handlePronunciationEvaluation(quizIndex, audioBase64) {
+                const quiz = pages[quizIndex];
+                const feedbackEl = document.querySelector(`#speech-status-${quizIndex}`);
+                const micBtn = document.querySelector(`#mic-btn-${quizIndex}`);
+                
+                if (attempts[quizIndex] === undefined) attempts[quizIndex] = 0;
+                attempts[quizIndex]++;
+                const isFirstAttempt = attempts[quizIndex] === 1;
+                
+                try {
+                    const response = await fetch(CLOVA_API_FUNCTION_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            audioBase64: audioBase64,
+                            languageCode: "Kor", 
+                            referenceText: quiz.ko
+                        })
+                    });
+        
+                    if (!response.ok) {
+                        let errorDetails = "Erreur inconnue";
+                        const errorText = await response.text(); 
+                        try { const errorResult = JSON.parse(errorText); errorDetails = errorResult.error || JSON.stringify(errorResult); }
+                        catch (e) { errorDetails = errorText; }
+                        throw new Error(`Erreur du backend (${response.status}): ${errorDetails}`);
+                    }
+                    
+                    const result = await response.json(); 
+                    const transcribedText = result.text || '';
+                    const score = (result.assessment ? result.assessment.pronunciation_score : 0) || 0;
+
+                    // [요청 사항] 인식된 텍스트를 피드백과 함께 표시
+                    const normalizedTranscribed = normalizeText(transcribedText);
+                    const normalizedReference = normalizeText(quiz.ko);
+                    
+                    const isTextMatch = (normalizedTranscribed === normalizedReference);
+                    const isScorePass = score >= 80; // [요청 사항] 80점 컷
+                    
+                    const isCorrect = isTextMatch && isScorePass; 
+     
+                    if (isCorrect) {
+                        scores[quizIndex] = 1; // 1 = 통과
+                        correctSound?.triggerAttackRelease('C5', '0.2s');
+                        if(micBtn) micBtn.disabled = true;
+                        if(feedbackEl) {
+                            // [요청 사항] 텍스트 필드 추가 대신, 피드백에 인식된 텍스트 포함
+                            feedbackEl.textContent = `Très bien ! "${transcribedText}" (Score: ${score} / 100)`;
+                            feedbackEl.className = 'speech-status-indicator feedback-message text-center text-green-600';
+                        }
+                    } else {
+                        if (isFirstAttempt) {
+                            scores[quizIndex] = null; // 재시도 기회
+                            wrongSound?.triggerAttackRelease('A#2', '0.2s');
+                            if(feedbackEl) {
+                                 // [요청 사항] 텍스트 필드 추가 대신, 피드백에 인식된 텍스트 포함
+                                 feedbackEl.textContent = `J'ai entendu : "${transcribedText || '...'}" (Score: ${score}). Écoutez et parlez à nouveau.`; 
+                                 feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                            }
+                        } else {
+                            scores[quizIndex] = 0; // 최종 실패
+                            wrongSound?.triggerAttackRelease('A#2', '0.2s');
+                            if(feedbackEl) {
+                                 feedbackEl.textContent = `Réponse: "${quiz.ko}" (Votre score: ${score} / 100)`;
+                                 feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                            }
+                            if(micBtn) micBtn.disabled = true;
+                        }
+                    }
+                    
+                    // [요청 사항] PostMessage
+                    window.parent.postMessage({
+                        type: 'pronunciation_result',
+                        quizId: quizIndex,
+                        naverScore: score,
+                        pointsAwarded: scores[quizIndex], // 1(통과) 또는 0(실패)
+                        transcribedText: transcribedText,
+                        referenceText: quiz.ko,
+                        isCorrect: isCorrect,
+                        attempt: attempts[quizIndex],
+                        assessment: result.assessment || { pronunciation_score: score }
+                    }, '*');
+
+                } catch (error) {
+                    console.error("Erreur lors de l'évaluation:", error); 
+                    if(feedbackEl) {
+                        feedbackEl.textContent = `Erreur de connexion. Veuillez réessayer.`;
+                        feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                    }
+                    if (attempts[quizIndex] > 0) attempts[quizIndex]--; 
+                } finally {
+                    if(micBtn) micBtn.classList.remove('loading');
+                    updateNavButtons(); 
+                }
+            }
+            // --- [끝] Naver API 로직 ---
+
+            /**
+             * [수정] quizIndex를 받도록 변경
+             */
+            function createSimpleVocabCard(data, quizIndex) {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center mb-4 sm:mb-6';
+                
+                const audioArea = document.createElement('div');
+                audioArea.className = 'cursor-pointer hover:bg-gray-100 transition duration-300 p-2 rounded-lg w-full';
+                audioArea.onclick = () => playAudio(data.audio);
+
+                const koText = document.createElement('h2');
+                koText.className = 'text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2 text-center';
+                koText.innerText = data.ko;
+                audioArea.appendChild(koText);
+
+                const frText = document.createElement('p');
+                frText.className = 'text-base sm:text-lg text-gray-600 text-center';
+                frText.innerText = data.fr;
+                audioArea.appendChild(frText);
+                
+                const icon = document.createElement('span');
+                icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400 mt-2 mx-auto"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>';
+                audioArea.appendChild(icon);
+                
+                card.appendChild(audioArea);
+                
+                // [!!!] 요청 사항: 'text_with_vocab' 에서는 음성 인식 섹션(createSpeechSection)을 호출하지 않습니다.
+                // card.appendChild(createSpeechSection(quizIndex, data.ko)); // <- [삭제]
+                
+                return card;
+            }
+
+            /**
+             * [수정] quizIndex를 받도록 변경
+             */
+            function createVocabCard(data, quizIndex) {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center';
+
+                if (data.subtitle) {
+                    const subtitleEl = document.createElement('p');
+                    subtitleEl.className = 'text-lg sm:text-xl font-semibold text-gray-700 mb-4 text-center';
+                    subtitleEl.innerText = data.subtitle;
+                    card.appendChild(subtitleEl);
+                }
+
+                if (data.image) {
+                    const img = document.createElement('img');
+                    img.src = data.image;
+                    img.alt = data.ko;
+                    img.className = 'w-full h-32 sm:h-40 object-contain rounded-lg mb-4';
+                    img.onerror = () => img.src = `https://placehold.co/400x200/eee/ccc?text=Image+${data.ko}`;
+                    card.appendChild(img);
+                }
+
+                const koText = document.createElement('h2');
+                koText.className = 'text-3xl sm:text-4xl font-bold text-gray-900 mb-2 text-center';
+                koText.innerText = data.ko;
+                card.appendChild(koText);
+
+                const frText = document.createElement('p');
+                frText.className = 'text-lg sm:text-xl text-gray-600 mb-4 sm:mb-6 text-center';
+                frText.innerText = data.fr;
+                card.appendChild(frText);
+
+                const audioBtn = document.createElement('button');
+                audioBtn.className = 'w-full bg-green-600 text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-full shadow-md hover:bg-green-700 transition duration-300 flex items-center justify-center gap-2 text-sm sm:text-base';
+                audioBtn.innerHTML = 'Écoutez <span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg></span>';
+                audioBtn.onclick = () => playAudio(data.audio);
+                card.appendChild(audioBtn);
+
+                // [!!!] 요청 사항: 'vocab' 타입은 음성 인식을 유지합니다.
+                card.appendChild(createSpeechSection(quizIndex, data.ko));
+
+                return card;
+            }
+
+            /**
+             * [추가] 음성인식 버튼/피드백 섹션을 생성하는 헬퍼 함수
+             */
+            function createSpeechSection(quizIndex, correctKoreanText) {
+                const speechContainer = document.createElement('div');
+                speechContainer.className = 'w-full flex flex-col items-center mt-4';
+                
+                const repeatBtn = document.createElement('button');
+                repeatBtn.id = `mic-btn-${quizIndex}`;
+                // [수정] Pratique 1과 동일하게 파란색 버튼으로 변경
+                repeatBtn.className = 'mic-btn bg-sky-500 text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-full shadow-md hover:bg-sky-600 transition duration-300 flex items-center justify-center gap-2 text-sm sm:text-base';
+                repeatBtn.innerHTML = 'Répétez <span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span>';
+                
+                repeatBtn.onclick = () => {
+                    if (repeatBtn.disabled || repeatBtn.classList.contains('loading')) return;
+                    if (!attempts[quizIndex]) attempts[quizIndex] = 0;
+                    if (attempts[quizIndex] >= 2 && scores[quizIndex] === null) return; 
+                    
+                    if (isRecording) stopRecording(quizIndex);
+                    else {
+                        initAudioSynth(); 
+                        startRecording(quizIndex);
+                    }
+                };
+                
+                speechContainer.appendChild(repeatBtn);
+
+                const speechStatus = document.createElement('p');
+                speechStatus.id = `speech-status-${quizIndex}`;
+                // [수정] 텍스트 필드(transcript)와 피드백 메시지(feedback)를 분리
+                speechStatus.className = 'speech-status-indicator feedback-message text-center h-6 text-sm sm:text-base';
+                speechContainer.appendChild(speechStatus);
+                
+                // [요청 사항] 인식된 텍스트 필드 추가
+                const transcriptEl = document.createElement('p');
+                transcriptEl.id = `transcript-${quizIndex}`;
+                transcriptEl.className = 'text-base sm:text-lg text-slate-500 h-6 mt-1';
+                speechContainer.appendChild(transcriptEl);
+
+                const attemptsEl = document.createElement('div');
+                attemptsEl.id = `attempts-${quizIndex}`;
+                attemptsEl.className = 'text-xs sm:text-sm text-slate-400 mt-1';
+                attemptsEl.textContent = 'Tentatives restantes : 2';
+                speechContainer.appendChild(attemptsEl);
+
+                return speechContainer;
+            }
+
+            /**
+             * [수정] quizIndex를 받도록 변경, 반응형 UI 적용
+             */
+            function createQuizCard(data, quizIndex) {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center';
+
+                const questionText = document.createElement('p');
+                questionText.className = 'text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6 text-center';
+                questionText.innerText = data.question;
+                card.appendChild(questionText);
+
+                const optionsContainer = document.createElement('form'); 
+                optionsContainer.id = `quiz-form-${quizIndex}`;
+                optionsContainer.className = 'w-full flex flex-col gap-3';
+                
+                data.options.forEach((option, index) => {
+                    const optionBtn = document.createElement('button');
+                    optionBtn.type = 'button'; 
+                    optionBtn.className = 'quiz-option-btn w-full bg-gray-100 text-gray-800 font-medium p-3 sm:p-4 rounded-xl shadow-sm hover:bg-gray-200 transition duration-300 text-sm sm:text-base text-left'; // [수정] text-left
+                    optionBtn.innerHTML = `<span class="font-bold text-lg">${option.ko}</span><br><span class="text-gray-600">${option.fr}</span>`; // [수정] fr 추가
+                    optionBtn.dataset.index = index;
+                    
+                    optionBtn.addEventListener('click', () => {
+                        checkAnswer(optionBtn, index, data.correct);
+                    });
+                    
+                    optionsContainer.appendChild(optionBtn);
+                });
+
+                card.appendChild(optionsContainer);
+                
+                const quizFeedback = document.createElement('p');
+                quizFeedback.id = `quiz-feedback-${quizIndex}`;
+                quizFeedback.className = 'quiz-feedback-indicator feedback-message text-center h-6 text-sm sm:text-base';
+                card.appendChild(quizFeedback);
+
+                return card;
+            }
+
+            /**
+             * Go to the next page.
+             */
+            window.nextPage = function() {
+                if (document.getElementById('next-btn').disabled) return;
+                if (currentPage < pages.length - 1) {
+                    currentPage++;
+                    renderPage();
+                    playPageTurnSound();
+                }
+                
+                // [추가] 마지막 페이지 PostMessage
+                if (currentPage === pages.length - 1) {
+                     window.parent.postMessage({ type: 'lesson_complete' }, '*');
+                     console.log('Lesson complete message sent to parent.');
+                }
+            }
+
+            /**
+             * Go to the previous page.
+             */
+            window.prevPage = function() {
+                if (document.getElementById('prev-btn').disabled) return;
+                if (currentPage > 0) {
+                    currentPage--;
+                    renderPage();
+                    playPageTurnSound();
+                }
+            }
+
+            /**
+             * [수정] Pratique 1과 동일한 네비게이션 로직
+             */
+            function updateNavButtons() {
+                const prevBtn = document.getElementById('prev-btn');
+                const nextBtn = document.getElementById('next-btn');
+                const retryBtn = document.getElementById('retry-btn');
+                const passerBtn = document.getElementById('passer-btn');
+
+                prevBtn.disabled = (currentPage === 0);
+                
+                const isLastPage = currentPage === pages.length - 1;
+                nextBtn.style.visibility = isLastPage ? 'hidden' : 'visible';
+                
+                passerBtn.classList.add('hidden');
+                retryBtn.classList.add('hidden');
+
+                const pageData = pages[currentPage];
+                const quizIndex = currentPage;
+                
+                if (pageData.type.startsWith('speech') || pageData.type === 'quiz') {
+                    const isAnswered = scores[quizIndex] !== null;
+                    nextBtn.disabled = !isAnswered;
+
+                    // 2회 시도 후 0점일 때 (실패)
+                    if ((attempts[quizIndex] || 0) >= 2 && scores[quizIndex] === 0) {
+                        passerBtn.classList.remove('hidden');
+                        nextBtn.disabled = true;
+                    }
+                    
+                    // MCQ 1회 실패 시 (0점)
+                    if (pageData.type === 'quiz' && scores[quizIndex] === 0) {
+                         retryBtn.classList.remove('hidden');
+                         nextBtn.disabled = true;
+                    }
+                } else {
+                    // 텍스트 페이지는 항상 '다음' 활성화 (마지막 페이지 제외)
+                    nextBtn.disabled = isLastPage;
+                }
+            }
+
+            // --- 3. HELPER FUNCTIONS ---
+
+            function playPageTurnSound() {
+                const isLastPage = currentPage === pages.length - 1;
+                if (isLastPage && completionSynth) {
+                    completionSynth.triggerAttackRelease(["C5", "E5", "G5"], "4n", Tone.now());
+                } else if (pageTurnSynth) {
+                    pageTurnSynth.triggerAttackRelease("C5", "8n", Tone.now());
+                }
+            }
+
+            function highlightText(text) {
+                return text.replace(/<([^>]+)>/g, '<span class="highlight">$1</span>');
+            }
+
+            /**
+             * [수정] MCQ (퀴즈) 답변 확인 로직
+             */
+            function checkAnswer(buttonElement, selectedIndex, correctIndex) {
+                const quizIndex = currentPage;
+                if (scores[quizIndex] !== null) return; 
+
+                initAudioSynth(); 
+                
+                const allOptionButtons = buttonElement.parentElement.querySelectorAll('button');
+                const feedbackEl = document.getElementById(`quiz-feedback-${quizIndex}`);
+                const pageData = pages[quizIndex];
+                
+                attempts[quizIndex] = (attempts[quizIndex] || 0) + 1;
+
+                if (selectedIndex === correctIndex) {
+                    scores[quizIndex] = attempts[quizIndex] === 1 ? 2 : 1; // 1차 2점, 2차 1점
+                    buttonElement.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+                    buttonElement.classList.add('bg-green-500', 'text-white');
+                    if (feedbackEl) {
+                        feedbackEl.textContent = 'Très bien !';
+                        feedbackEl.className = 'quiz-feedback-indicator text-center font-medium mt-4 h-6 text-green-600';
+                    }
+                    correctSound?.triggerAttackRelease('C5', '0.2s');
+                    allOptionButtons.forEach(btn => { btn.disabled = true; });
+
+                    allOptionButtons.forEach((btn, index) => {
+                        btn.innerHTML = `${pageData.options[index].ko}<br><span class="text-sm font-normal">${pageData.options[index].fr}</span>`;
+                        btn.classList.add('text-left', 'leading-snug', 'p-3', 'sm:p-4');
+                        if(index !== correctIndex) {
+                            btn.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+                            btn.classList.add('bg-gray-200', 'text-gray-700'); 
+                        }
+                    });
+                } else {
+                    if (attempts[quizIndex] >= 2) scores[quizIndex] = 0; // 2회 실패
+                    buttonElement.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+                    buttonElement.classList.add('bg-red-500', 'text-white');
+                    if (feedbackEl) {
+                        feedbackEl.textContent = 'Pas tout à fait. Réessayez !';
+                        feedbackEl.className = 'quiz-feedback-indicator text-center font-medium mt-4 h-6 text-red-500';
+                    }
+                    wrongSound?.triggerAttackRelease('A#2', '0.2s');
+                    
+                    buttonElement.disabled = true; 
+                    setTimeout(() => {
+                        buttonElement.disabled = false;
+                        buttonElement.classList.remove('bg-red-500', 'text-white');
+                        buttonElement.classList.add('bg-gray-100', 'hover:bg-gray-200');
+                        if (feedbackEl) feedbackEl.textContent = '';
+                    }, 1500);
+                }
+                
+                updateNavButtons();
+            }
+
+            // --- 4. INITIALIZATION ---
+            
+            // [수정] DOMContentLoaded 밖의 함수들을 리스너로 연결
+            document.getElementById('prev-btn').addEventListener('click', prevPage);
+            document.getElementById('next-btn').addEventListener('click', nextPage);
+
+            // [추가] Retry/Passer 버튼 리스너
+            document.getElementById('retry-btn').addEventListener('click', () => {
+                 const quizIndex = currentPage;
+                 scores[quizIndex] = null;
+                 attempts[quizIndex] = 0;
+                 renderPage(); // 페이지 다시 그림
+            });
+
+            document.getElementById('passer-btn').addEventListener('click', () => {
+                 const quizIndex = currentPage;
+                 if (scores[quizIndex] === null) scores[quizIndex] = 0; 
+                 if (currentPageIndex < pages.length - 1) {
+                      currentPage++;
+                      renderPage();
+                 }
+            });
+            
+            // [!!!] 수정: 퀴즈 페이지를 동적으로 생성/렌더링하는 로직
+            function renderPage() {
+                // [오류 수정] scorePage에 도달하면 렌더링을 중단하는 문제 수정
+                if (currentPage >= totalPages) return; 
+
+                const pageData = pages[currentPage];
+                const contentEl = document.getElementById('page-content');
+                contentEl.innerHTML = ''; // 이전 내용 지우기
+                contentEl.scrollTop = 0; // 스크롤 맨 위로
+
+                // [수정] 모바일 반응형 폰트 크기 적용
+                switch (pageData.type) {
+                    case 'text':
+                        if (pageData.title) {
+                            const title = document.createElement('h1');
+                            title.className = 'text-2xl sm:text-3xl font-bold text-gray-900 mb-4 sm:mb-6 text-center';
+                            title.innerText = pageData.title;
+                            contentEl.appendChild(title);
+                        }
+                        const text = document.createElement('p');
+                        text.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed text-center'; 
+                        text.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(text);
+                        break;
+
+                    case 'text_with_vocab':
+                        contentEl.appendChild(createSimpleVocabCard(pageData, currentPage));
+                        const explanationText = document.createElement('p');
+                        explanationText.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed text-center mt-4 sm:mt-6'; 
+                        explanationText.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(explanationText);
+                        break;
+
+                    case 'vocab':
+                        contentEl.appendChild(createVocabCard(pageData, currentPage));
+                        break;
+
+                    case 'quiz':
+                        contentEl.appendChild(createQuizCard(pageData, currentPage));
+                        break;
+                }
+                updateNavButtons();
+                updateProgressBar();
+            }
+            
+            function updateProgressBar() {
+                const progress = (currentPage / (totalPages - 1)) * 100;
+                document.getElementById('progress-indicator').style.width = `${progress}%`;
+            }
+            
+            // Initial render on page load
+            renderPage();
+        });
+    </script>
+
+</body>
+</html>
