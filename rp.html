@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Leçon supplémentaire : Taxi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', 'Noto Sans KR', sans-serif; overflow: hidden; touch-action: none; }
+        
+        /* Animations */
+        @keyframes speaking { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        .agent-speaking { animation: speaking 1s infinite ease-in-out; }
+        @keyframes pulse-mic { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .mic-recording { animation: pulse-mic 1.5s infinite; background-color: #ef4444 !important; border-color: #ef4444 !important; color: white !important; }
+
+        /* Chat Bubbles */
+        .bubble { max-width: 80%; padding: 12px 16px; border-radius: 18px; margin-bottom: 8px; font-size: 1rem; line-height: 1.5; position: relative; animation: popIn 0.3s ease-out; }
+        .bubble-agent { background: #f3f4f6; color: #1f2937; align-self: flex-start; border-top-left-radius: 4px; }
+        .bubble-user { background: #3b82f6; color: white; align-self: flex-end; border-top-right-radius: 4px; }
+        @keyframes popIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .screen { display: none; width: 100%; height: 100%; flex-direction: column; }
+        .screen.active { display: flex; }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen w-full flex flex-col">
+
+    <!-- Screen 1: Cover -->
+    <div id="cover-screen" class="screen active bg-yellow-400 items-center justify-center p-8 text-center relative overflow-hidden">
+        <div class="absolute inset-0 opacity-10 pointer-events-none flex flex-wrap content-center justify-center text-9xl">🚖</div>
+        <div class="bg-white p-8 rounded-3xl shadow-xl z-10 max-w-md w-full">
+            <div class="text-6xl mb-6">🚕</div>
+            <h1 class="text-2xl font-bold text-slate-900 mb-2">Leçon supplémentaire</h1>
+            <h2 class="text-3xl font-extrabold text-indigo-600 mb-4">한국어로 말하기!</h2>
+            <p class="text-slate-600 mb-8">Parlez en coréen avec un chauffeur de taxi</p>
+            <button id="start-btn" class="w-full bg-indigo-600 text-white font-bold py-4 px-8 rounded-xl shadow-lg hover:bg-indigo-700 transition-transform active:scale-95 text-xl">Commencer</button>
+        </div>
+    </div>
+
+    <!-- Screen 2: Chat -->
+    <div id="chat-screen" class="screen relative">
+        <div class="flex-none bg-white p-4 shadow-sm z-10 flex flex-col items-center justify-center border-b border-slate-200">
+            <div id="status-emoji" class="text-4xl mb-2 transition-all duration-500">🚖</div>
+            <h1 class="text-lg font-bold text-slate-800 text-center">Taxi Conversation</h1>
+        </div>
+
+        <div id="chat-container" class="flex-grow overflow-y-auto p-4 flex flex-col gap-4 scroll-smooth pb-40"></div>
+
+        <div class="fixed top-1/3 left-0 right-0 pointer-events-none flex justify-center items-center opacity-10 transition-opacity duration-500 z-0" id="agent-overlay">
+            <div id="agent-avatar" class="text-9xl filter grayscale opacity-50 transition-all duration-300">👨‍🦰</div>
+        </div>
+
+        <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 pb-8 flex flex-col items-center gap-4 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20">
+            <div id="hint-container" class="w-full flex flex-col items-center gap-2 hidden">
+                <div id="hint-text" class="hidden text-sm font-medium text-amber-600 bg-amber-50 px-4 py-2 rounded-full border border-amber-200 animate-bounce text-center"></div>
+                <button id="hint-btn" class="text-xs font-bold text-slate-500 underline decoration-slate-300 hover:text-amber-500 transition-colors">💡 Besoin d'un indice ?</button>
+            </div>
+            <div class="relative">
+                <button id="action-btn" class="w-20 h-20 rounded-full bg-indigo-600 text-white text-4xl shadow-lg flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed">⏳</button>
+            </div>
+            <p id="status-text" class="text-sm text-slate-500 font-medium h-5">Chargement...</p>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // [CONFIG] API 설정 확인 필수!
+        // 1. Base 44 앱의 미리보기 주소(URL)를 확인하세요. (예: https://coreeno.base44.app)
+        // 2. 아래 변수에 그 주소를 정확히 입력해야 API가 작동합니다.
+        const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+        
+        const CLOVA_API_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+        const GEMINI_CHAT_URL = BASE_44_ORIGIN + '/api/functions/geminiChat';
+        const GEMINI_TTS_URL = BASE_44_ORIGIN + '/api/functions/geminiTTS';
+
+        // [DOM]
+        const coverScreen = document.getElementById('cover-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const startBtn = document.getElementById('start-btn');
+        const chatContainer = document.getElementById('chat-container');
+        const actionBtn = document.getElementById('action-btn');
+        const statusText = document.getElementById('status-text');
+        const statusEmoji = document.getElementById('status-emoji');
+        const agentAvatar = document.getElementById('agent-avatar');
+        const hintContainer = document.getElementById('hint-container');
+        const hintBtn = document.getElementById('hint-btn');
+        const hintTextEl = document.getElementById('hint-text');
+
+        // [State]
+        let currentStage = 0;
+        let currentSubStep = 0;
+        let isRecording = false;
+        let isAgentSpeaking = false;
+        let mediaRecorder;
+        let audioChunks = [];
+        let recordingTimeout;
+        let hintTimeout;
+        let audioContextInitialized = false;
+
+        // [Scenario]
+        const SCENARIO = [
+            { stage: 1, emoji: "🚖", agentLine: "안녕하세요, 어서오세요.", expectedIntent: "Greeting (인사)", hintFr: "Dites '안녕하세요' au chauffeur", hintKo: "안녕하세요" },
+            { stage: 2, emoji: "🚖", agentLine: "어디로 갈까요?", expectedIntent: "State destination (목적지 말하기)", hintFr: "Demandez d'aller à la gare de Séoul !", hintKo: "서울역으로 가 주세요" },
+            { stage: 3, emoji: "🚕", agentLine: "네, 출발하겠습니다.", events: [
+                { emoji: "🥶", hintFr: "Il fait trop froid ! Demandez 'climatisation...'", hintKo: "에어컨 좀 꺼 주세요", expectedIntent: "Ask to turn off/down AC" },
+                { emoji: "⏱️", hintFr: "Vous êtes pressé... Demandez 'combien de temps?'", hintKo: "얼마나 걸려요?", expectedIntent: "Ask about duration/time" },
+                { emoji: "🔉", hintFr: "C'est trop bruyant! Demandez 'radio...'", hintKo: "라디오 좀 줄여 주세요", expectedIntent: "Ask to turn down radio" }
+            ]},
+            { stage: 4, emoji: "🚖", agentLine: "도착했습니다.", expectedIntent: "Ask for price (얼마예요?)", hintFr: "Demandez le prix au chauffeur", hintKo: "얼마예요?" },
+            { stage: 5, emoji: "💵", agentLine: "5800원입니다. 계산은 어떻게 하시겠어요?", expectedIntent: "Choose payment method", hintFr: "Dites que vous payez par carte", hintKo: "카드로 낼게요" },
+            { stage: 6, emoji: "👋", agentLine: "네, 감사합니다. 안녕히 가세요.", expectedIntent: "Farewell (작별 인사)", hintFr: "Dites merci et au revoir", hintKo: "감사합니다, 안녕히 계세요" }
+        ];
+
+        const sounds = {
+            success: new Tone.Synth().toDestination(),
+            fail: new Tone.Synth({ oscillator: { type: 'triangle' } }).toDestination(),
+            pop: new Tone.MembraneSynth().toDestination()
+        };
+
+        async function initAudio() {
+            if (!audioContextInitialized) { await Tone.start(); audioContextInitialized = true; }
+        }
+
+        // [Start]
+        startBtn.addEventListener('click', () => {
+            initAudio();
+            coverScreen.classList.remove('active');
+            chatScreen.classList.add('active');
+            startScenario();
+        });
+
+        function startScenario() { currentStage = 1; processStage(); }
+
+        actionBtn.addEventListener('click', () => {
+            if (isRecording) stopRecording();
+            else if (!isAgentSpeaking) startRecording();
+        });
+
+        async function processStage() {
+            hideHint();
+            let stepData = SCENARIO.find(s => s.stage === currentStage);
+            if (!stepData) {
+                addMessage("System", "Conversation terminée. Bravo !");
+                window.parent.postMessage({ type: 'lesson_complete' }, '*');
+                return;
+            }
+            statusEmoji.textContent = stepData.emoji;
+            if (currentStage === 3) {
+                if (currentSubStep === 0) {
+                    await agentSpeak(stepData.agentLine);
+                    await wait(1000);
+                    triggerRandomEvent(0);
+                    return;
+                }
+            } else {
+                await agentSpeak(stepData.agentLine);
+                activateUserTurn();
+            }
+        }
+
+        async function triggerRandomEvent(index) {
+            const events = SCENARIO.find(s => s.stage === 3).events;
+            if (index >= events.length) {
+                currentStage++;
+                processStage();
+                return;
+            }
+            currentSubStep = index + 1;
+            const evt = events[index];
+            statusEmoji.textContent = "🚕💨";
+            statusText.textContent = "En route...";
+            await wait(2000);
+            statusEmoji.textContent = evt.emoji;
+            SCENARIO[2].expectedIntent = evt.expectedIntent; 
+            SCENARIO[2].hintFr = evt.hintFr;
+            SCENARIO[2].hintKo = evt.hintKo;
+            activateUserTurn();
+        }
+
+        // [수정] 에러 핸들링이 추가된 agentSpeak
+        async function agentSpeak(text) {
+            isAgentSpeaking = true;
+            statusText.textContent = "L'agent parle...";
+            addMessage("Agent", text);
+            
+            agentAvatar.classList.remove('opacity-50', 'grayscale');
+            agentAvatar.classList.add('agent-speaking', 'opacity-100');
+            actionBtn.disabled = true; actionBtn.classList.add('bg-slate-400'); actionBtn.innerHTML = "🔇";
+
+            try {
+                // [디버깅] TTS 요청 시작
+                console.log("Requesting TTS for:", text);
+                const response = await fetch(GEMINI_TTS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+
+                if (!response.ok) throw new Error(`TTS API Error: ${response.status}`);
+
+                const data = await response.json();
+                if (data.audioBase64) {
+                    await playPCM(data.audioBase64);
+                } else {
+                    throw new Error("No audio data");
+                }
+            } catch (e) {
+                console.error("TTS Failed:", e);
+                // [알림] TTS 실패 시 경고창 표시 (디버깅용)
+                alert(`Erreur TTS: ${e.message}\nVérifiez l'URL de l'API et la clé Gemini.`);
+                await wait(1500); // Fallback delay
+            }
+            
+            agentAvatar.classList.remove('agent-speaking', 'opacity-100');
+            agentAvatar.classList.add('opacity-50', 'grayscale');
+            isAgentSpeaking = false;
+            if (currentStage !== 3 || currentSubStep > 0) activateUserTurn();
+        }
+
+        function playPCM(base64Data) {
+            return new Promise((resolve) => {
+                try {
+                    const binaryString = atob(base64Data);
+                    const len = binaryString.length;
+                    const bytes = new Uint8Array(len);
+                    for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+                    const wavBytes = pcmToWav(bytes, 24000); 
+                    const blob = new Blob([wavBytes], { type: 'audio/wav' });
+                    const url = URL.createObjectURL(blob);
+                    const audio = new Audio(url);
+                    audio.onended = resolve;
+                    // [수정] 오디오 재생 오류 처리
+                    audio.play().catch(e => {
+                        console.error("Audio Play Error:", e);
+                        alert("Erreur lecture audio. Vérifiez les paramètres du navigateur.");
+                        resolve();
+                    });
+                } catch (e) { console.error(e); resolve(); }
+            });
+        }
+
+        function pcmToWav(pcmData, sampleRate) {
+            const numChannels = 1; const bitsPerSample = 16; const byteRate = (sampleRate * numChannels * bitsPerSample) / 8; const blockAlign = (numChannels * bitsPerSample) / 8; const dataSize = pcmData.length; const buffer = new ArrayBuffer(44 + dataSize); const view = new DataView(buffer);
+            writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true); writeString(view, 36, 'data'); view.setUint32(40, dataSize, true);
+            const pcmBytes = new Uint8Array(buffer, 44); pcmBytes.set(pcmData); return buffer;
+        }
+        function writeString(view, offset, string) { for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i)); }
+
+        function activateUserTurn() {
+            isRecording = false;
+            actionBtn.disabled = false;
+            actionBtn.classList.remove('bg-slate-400'); actionBtn.classList.add('bg-indigo-600');
+            actionBtn.innerHTML = "👄";
+            statusText.textContent = "À vous de parler !";
+            hintContainer.classList.remove('hidden');
+        }
+
+        hintBtn.addEventListener('click', () => {
+            let stepData = SCENARIO.find(s => s.stage === currentStage);
+            if(currentStage === 3) stepData = { hintKo: SCENARIO[2].hintKo };
+            hintTextEl.textContent = `Dites : "${stepData.hintKo}"`;
+            hintTextEl.classList.remove('hidden'); hintBtn.classList.add('hidden');
+            if (hintTimeout) clearTimeout(hintTimeout);
+            hintTimeout = setTimeout(() => { forceNextStep(); }, 8000);
+        });
+
+        function hideHint() {
+            hintContainer.classList.add('hidden'); hintTextEl.classList.add('hidden'); hintBtn.classList.remove('hidden');
+            if (hintTimeout) clearTimeout(hintTimeout);
+        }
+
+        async function forceNextStep() {
+            addMessage("System", "Passons à la suite... (Temps écoulé)");
+            sounds.pop.triggerAttackRelease("C3", "0.1");
+            if (currentStage === 3) triggerRandomEvent(currentSubStep);
+            else { currentStage++; processStage(); }
+        }
+
+        async function startRecording() {
+            if (!navigator.mediaDevices) { alert("Microphone non détecté"); return; }
+            if (hintTimeout) clearTimeout(hintTimeout);
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = []; isRecording = true;
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstart = () => {
+                    actionBtn.innerHTML = "⏹️"; actionBtn.classList.add('mic-recording'); statusText.textContent = "Enregistrement... (Max 14s)";
+                    recordingTimeout = setTimeout(() => { if (isRecording) stopRecording(); }, 14000);
+                };
+                mediaRecorder.onstop = async () => {
+                    actionBtn.classList.remove('mic-recording'); actionBtn.innerHTML = "⏳"; actionBtn.disabled = true; statusText.textContent = "Analyse...";
+                    isRecording = false; clearTimeout(recordingTimeout);
+                    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(blob);
+                    reader.onloadend = () => processUserAudio(reader.result);
+                    stream.getTracks().forEach(t => t.stop());
+                };
+                mediaRecorder.start();
+            } catch (e) { console.error(e); alert("Erreur micro: " + e.message); }
+        }
+
+        function stopRecording() { if (mediaRecorder && isRecording) mediaRecorder.stop(); }
+
+        // [수정] 에러 핸들링이 추가된 processUserAudio
+        async function processUserAudio(base64Audio) {
+            try {
+                // 1. STT (Naver)
+                console.log("Calling STT...");
+                const sttResponse = await fetch(CLOVA_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audioBase64: base64Audio, languageCode: "Kor" })
+                });
+                
+                if (!sttResponse.ok) throw new Error(`STT API Error: ${sttResponse.status}`);
+                
+                const sttResult = await sttResponse.json();
+                const rawResult = sttResult.raw || sttResult;
+                const userText = rawResult.text;
+
+                if (!userText) throw new Error("Aucune parole détectée (STT vide)");
+                addMessage("User", userText);
+
+                // 2. Logic (Gemini)
+                console.log("Calling Gemini Chat...");
+                let stepData = SCENARIO.find(s => s.stage === currentStage);
+                const currentIntent = (currentStage === 3) ? SCENARIO[2].expectedIntent : stepData.expectedIntent;
+
+                const systemInstruction = `
+                당신은 한국의 친절한 택시 기사입니다. 현재 상황: [${currentIntent}]
+                유저의 발화: "${userText}"
+                규칙:
+                1. 유저가 상황에 적절한 한국어를 말했다면: { "reply": "자연스러운 한국어 응답", "isCorrect": true }
+                2. 유저가 엉뚱한 말을 하거나 외국어를 썼다면: { "reply": "잘 못 알아들었어요. 다시 말씀해 주세요.", "isCorrect": false }
+                3. JSON만 반환하세요.
+                `;
+
+                const geminiResponse = await fetch(GEMINI_CHAT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: userText, systemInstruction: systemInstruction })
+                });
+
+                if (!geminiResponse.ok) throw new Error(`Gemini Chat Error: ${geminiResponse.status}`);
+
+                const geminiData = await geminiResponse.json();
+                if (!geminiData.text) throw new Error("Gemini response empty");
+
+                let cleanJson = geminiData.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const aiLogic = JSON.parse(cleanJson);
+
+                if (aiLogic.isCorrect) {
+                    sounds.success.triggerAttackRelease("E4", "0.1");
+                    await agentSpeak(aiLogic.reply);
+                    if (currentStage === 3) triggerRandomEvent(currentSubStep);
+                    else { currentStage++; processStage(); }
+                } else {
+                    sounds.fail.triggerAttackRelease("C2", "0.2");
+                    await agentSpeak(aiLogic.reply);
+                    hintContainer.classList.remove('hidden');
+                    activateUserTurn();
+                }
+            } catch (e) {
+                console.error(e);
+                // [알림] 에러 내용을 화면에 표시
+                alert(`Erreur de traitement: ${e.message}\nVérifiez vos fonctions backend.`);
+                addMessage("System", "Erreur. Réessayez.");
+                activateUserTurn();
+            }
+        }
+
+        function addMessage(sender, text) {
+            const div = document.createElement('div');
+            div.className = `bubble ${sender === 'User' ? 'bubble-user' : 'bubble-agent'}`;
+            div.textContent = text;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+    });
+    </script>
+</body>
+</html>
