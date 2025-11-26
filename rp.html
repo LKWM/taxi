@@ -66,14 +66,20 @@
     </div>
 
     <script>
+    function playAudio(id) {
+        const audio = document.getElementById(`audio-${id}`);
+        if (audio) {
+            audio.currentTime = 0;
+            audio.play().catch(e => console.error("Audio play failed:", e));
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
-        // [CONFIG] Base 44 URLs
         const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
         const CLOVA_API_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
         const GEMINI_CHAT_URL = BASE_44_ORIGIN + '/api/functions/geminiChat';
         const GEMINI_TTS_URL = BASE_44_ORIGIN + '/api/functions/geminiTTS';
 
-        // [DOM]
         const coverScreen = document.getElementById('cover-screen');
         const chatScreen = document.getElementById('chat-screen');
         const startBtn = document.getElementById('start-btn');
@@ -86,7 +92,6 @@
         const hintBtn = document.getElementById('hint-btn');
         const hintTextEl = document.getElementById('hint-text');
 
-        // [State]
         let currentStage = 0;
         let currentSubStep = 0;
         let isRecording = false;
@@ -97,7 +102,6 @@
         let hintTimeout;
         let audioContextInitialized = false;
 
-        // [Scenario]
         const SCENARIO = [
             { stage: 1, emoji: "🚖", agentLine: "안녕하세요, 어서오세요.", expectedIntent: "Greeting (인사)", hintFr: "Dites '안녕하세요' au chauffeur", hintKo: "안녕하세요" },
             { stage: 2, emoji: "🚖", agentLine: "어디로 갈까요?", expectedIntent: "State destination (목적지 말하기)", hintFr: "Demandez d'aller à la gare de Séoul !", hintKo: "서울역으로 가 주세요" },
@@ -119,10 +123,12 @@
         };
 
         async function initAudio() {
-            if (!audioContextInitialized) { await Tone.start(); audioContextInitialized = true; }
+            if (!audioContextInitialized && Tone.context.state !== 'running') { 
+                await Tone.start(); 
+                audioContextInitialized = true; 
+            }
         }
 
-        // [Start]
         startBtn.addEventListener('click', () => {
             initAudio();
             coverScreen.classList.remove('active');
@@ -172,7 +178,6 @@
             statusText.textContent = "En route...";
             await wait(2000);
             statusEmoji.textContent = evt.emoji;
-            // Context update
             SCENARIO[2].expectedIntent = evt.expectedIntent; 
             SCENARIO[2].hintFr = evt.hintFr;
             SCENARIO[2].hintKo = evt.hintKo;
@@ -194,20 +199,29 @@
                     body: JSON.stringify({ text: text })
                 });
                 
+                // [수정] 상세 에러 로그 및 알림
                 if (!response.ok) {
-                    throw new Error(`TTS API status: ${response.status}`);
+                    const errorText = await response.text();
+                    console.error("TTS Backend Error Body:", errorText);
+                    throw new Error(`Backend Error (${response.status}): ${errorText}`);
                 }
 
                 const data = await response.json();
                 if (data.audioBase64) {
                     await playPCM(data.audioBase64);
                 } else {
+                    console.error("TTS Data missing:", data);
                     throw new Error("No audio data in response");
                 }
             } catch (e) {
-                console.error("TTS Playback Failed (Continuing without audio):", e);
-                // Fallback delay
-                await wait(Math.max(1500, text.length * 100));
+                console.warn("TTS Failed:", e);
+                // [알림] 에러 내용을 화면에 잠시 표시 (디버깅용)
+                // 500 에러라면 "API Key" 혹은 "Model Name" 문제일 가능성이 높음
+                const errorMsg = e.message.includes("500") ? 
+                    "Gemini TTS Server Error (Check API Key/Model)" : e.message;
+                
+                statusText.textContent = "Erreur TTS: " + errorMsg;
+                await wait(2000); // 에러 메시지 볼 시간
             } finally {
                 agentAvatar.classList.remove('agent-speaking', 'opacity-100');
                 agentAvatar.classList.add('opacity-50', 'grayscale');
@@ -277,6 +291,7 @@
         }
 
         async function startRecording() {
+            initAudio(); // Ensure audio context is ready on mic click
             if (!navigator.mediaDevices) { alert("Microphone non détecté"); return; }
             if (hintTimeout) clearTimeout(hintTimeout);
             try {
@@ -312,7 +327,7 @@
                     body: JSON.stringify({ audioBase64: base64Audio, languageCode: "Kor" })
                 });
                 
-                if (!sttResponse.ok) throw new Error(`STT Error: ${sttResponse.status}`);
+                if (!sttResponse.ok) throw new Error(`STT API Error: ${sttResponse.status}`);
                 
                 const sttResult = await sttResponse.json();
                 const rawResult = sttResult.raw || sttResult;
@@ -339,12 +354,14 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: userText, systemInstruction: systemInstruction })
                 });
-                
-                if (!geminiResponse.ok) throw new Error(`Gemini Error: ${geminiResponse.status}`);
+
+                // [수정] Gemini Chat 에러 핸들링 보강
+                if (!geminiResponse.ok) {
+                     const errText = await geminiResponse.text();
+                     throw new Error(`Gemini Chat Error: ${errText}`);
+                }
 
                 const geminiData = await geminiResponse.json();
-                if (!geminiData.text) throw new Error("Gemini response empty");
-
                 let cleanJson = geminiData.text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const aiLogic = JSON.parse(cleanJson);
 
@@ -361,7 +378,7 @@
                 }
             } catch (e) {
                 console.error(e);
-                addMessage("System", "Erreur de traitement. Réessayez.");
+                addMessage("System", `Erreur: ${e.message}`);
                 activateUserTurn();
             }
         }
