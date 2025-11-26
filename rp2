@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Leçon supplémentaire : Taxi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', 'Noto Sans KR', sans-serif; overflow: hidden; touch-action: none; }
+        
+        /* Animations */
+        @keyframes speaking { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        .agent-speaking { animation: speaking 1s infinite ease-in-out; }
+        
+        @keyframes pulse-mic { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        .mic-recording { animation: pulse-mic 1.5s infinite; background-color: #ef4444 !important; border-color: #ef4444 !important; color: white !important; }
+
+        /* Chat Bubbles */
+        .bubble { max-width: 80%; padding: 12px 16px; border-radius: 18px; margin-bottom: 8px; font-size: 1.05rem; line-height: 1.5; position: relative; animation: popIn 0.3s ease-out; }
+        .bubble-agent { background: #f3f4f6; color: #1f2937; align-self: flex-start; border-top-left-radius: 4px; }
+        .bubble-user { background: #3b82f6; color: white; align-self: flex-end; border-top-right-radius: 4px; }
+        .bubble-system { background: #fffbeb; color: #92400e; align-self: center; font-size: 0.9rem; padding: 8px 12px; border: 1px solid #fcd34d; }
+        @keyframes popIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .screen { display: none; width: 100%; height: 100%; flex-direction: column; }
+        .screen.active { display: flex; }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen w-full flex flex-col">
+
+    <!-- Screen 1: Cover -->
+    <div id="cover-screen" class="screen active bg-yellow-400 items-center justify-center p-8 text-center relative overflow-hidden">
+        <div class="absolute inset-0 opacity-10 pointer-events-none flex flex-wrap content-center justify-center text-9xl">🚖</div>
+        <div class="bg-white p-8 rounded-3xl shadow-xl z-10 max-w-md w-full">
+            <div class="text-6xl mb-6">🚕</div>
+            <h1 class="text-2xl font-bold text-slate-900 mb-2">Leçon supplémentaire</h1>
+            <h2 class="text-3xl font-extrabold text-indigo-600 mb-4">한국어로 말하기!</h2>
+            <p class="text-slate-600 mb-8">Parlez en coréen avec un chauffeur de taxi</p>
+            <button id="start-btn" class="w-full bg-indigo-600 text-white font-bold py-4 px-8 rounded-xl shadow-lg hover:bg-indigo-700 transition-transform active:scale-95 text-xl">Commencer</button>
+        </div>
+    </div>
+
+    <!-- Screen 2: Chat -->
+    <div id="chat-screen" class="screen relative">
+        <div class="flex-none bg-white p-4 shadow-sm z-10 flex flex-col items-center justify-center border-b border-slate-200">
+            <div id="status-emoji" class="text-4xl mb-2 transition-all duration-500">🚖</div>
+            <h1 class="text-lg font-bold text-slate-800 text-center">Taxi Conversation</h1>
+        </div>
+
+        <div id="chat-container" class="flex-grow overflow-y-auto p-4 flex flex-col gap-4 scroll-smooth pb-40"></div>
+
+        <div class="fixed top-1/3 left-0 right-0 pointer-events-none flex justify-center items-center opacity-10 transition-opacity duration-500 z-0" id="agent-overlay">
+            <div id="agent-avatar" class="text-9xl filter grayscale opacity-50 transition-all duration-300">👨‍🦰</div>
+        </div>
+
+        <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 pb-8 flex flex-col items-center gap-4 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20">
+            <div id="hint-container" class="w-full flex flex-col items-center gap-2 hidden">
+                <div id="hint-text" class="hidden text-sm font-medium text-amber-600 bg-amber-50 px-4 py-2 rounded-full border border-amber-200 text-center"></div>
+                <button id="hint-btn" class="text-xs font-bold text-slate-500 underline decoration-slate-300 hover:text-amber-500 transition-colors animate-bounce">
+                    💡 Besoin d'un indice ?
+                </button>
+            </div>
+            <div class="relative">
+                <button id="action-btn" class="w-20 h-20 rounded-full bg-indigo-600 text-white text-4xl shadow-lg flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed">⏳</button>
+            </div>
+            <p id="status-text" class="text-sm text-slate-500 font-medium h-5">Chargement...</p>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // [CONFIG]
+        const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+        const CLOVA_API_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+        const GEMINI_CHAT_URL = BASE_44_ORIGIN + '/api/functions/geminiChat';
+        const GEMINI_TTS_URL = BASE_44_ORIGIN + '/api/functions/geminiTTS';
+
+        // [DOM]
+        const coverScreen = document.getElementById('cover-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const startBtn = document.getElementById('start-btn');
+        const chatContainer = document.getElementById('chat-container');
+        const actionBtn = document.getElementById('action-btn');
+        const statusText = document.getElementById('status-text');
+        const statusEmoji = document.getElementById('status-emoji');
+        const agentAvatar = document.getElementById('agent-avatar');
+        const hintContainer = document.getElementById('hint-container');
+        const hintBtn = document.getElementById('hint-btn');
+        const hintTextEl = document.getElementById('hint-text');
+
+        // [State]
+        let currentStepIndex = 0;
+        let isRecording = false;
+        let isAgentSpeaking = false;
+        let mediaRecorder;
+        let audioChunks = [];
+        let recordingTimeout;
+        
+        // Timers
+        let idleTimer; // 5초 침묵 감지용
+        let hintDisplayTimer; // 힌트 표시 후 5초 카운트용
+        
+        let audioContextInitialized = false;
+
+        // [Scenario Definition]
+        const SCENARIO_STEPS = [
+            // --- 단계 1: 인사 및 목적지 ---
+            {
+                id: '1-1',
+                emoji: "🚖",
+                agentFirst: true,
+                agentLine: "안녕하세요, 어서오세요.",
+                expectedIntent: "Greeting (인사)",
+                hintText: "Dites “안녕하세요” au chauffeur",
+                nextStep: '1-2'
+            },
+            {
+                id: '1-2',
+                emoji: "🚖",
+                agentFirst: true,
+                agentLine: "어디로 갈까요?",
+                expectedIntent: "Destination (목적지: 서울역)",
+                hintText: "Demandez d’aller à la gare de Séoul! “서울역으로 가 주세요”",
+                successLine: "네, 출발하겠습니다.",
+                nextStep: '2-1',
+                forceNextLine: "네, 알겠습니다. 출발합니다." // 강제 진행 시 대사
+            },
+            // --- 단계 2: 돌발 상황 (유저가 먼저 말해야 함) ---
+            {
+                id: '2-1',
+                emoji: "🥶",
+                agentFirst: false, // 에이전트 침묵
+                introDelay: 3000, // 3초 운행중(...) 후 시작
+                introEmoji: "🚕💨",
+                expectedIntent: "Ask AC off (에어컨 끄기)",
+                hintText: "Il fait trop froid ! Demandez “에어컨 좀 꺼 주세요”",
+                successLine: "네, 알겠습니다.",
+                successEmoji: "🙂",
+                nextStep: '2-2',
+                forceNextLine: "네, 춥으시군요. 끄겠습니다."
+            },
+            {
+                id: '2-2',
+                emoji: "⏱️",
+                agentFirst: false,
+                expectedIntent: "Ask duration (시간 문의)",
+                hintText: "Vous êtes pressé… Demandez “얼마나 걸려요?”",
+                successLine: "다섯 시까지 도착할 수 있어요.",
+                successEmoji: "😀",
+                nextStep: '2-3',
+                forceNextLine: "한 20분 정도 걸립니다."
+            },
+            {
+                id: '2-3',
+                emoji: "🔉",
+                agentFirst: false,
+                expectedIntent: "Ask radio volume down (라디오 줄이기)",
+                hintText: "C’est trop bruyant! Demandez “라디오 좀 줄여 주세요”",
+                successLine: "네, 죄송합니다!",
+                successEmoji: "🔇",
+                nextStep: '3-1',
+                forceNextLine: "아, 시끄러우시군요. 끄겠습니다."
+            },
+            // --- 단계 3: 도착 및 결제 ---
+            {
+                id: '3-1',
+                emoji: "🚖",
+                agentFirst: true,
+                agentLine: "도착했습니다.",
+                expectedIntent: "Ask price (요금 문의)",
+                hintText: "Demandez le prix au chauffeur “얼마예요?”",
+                successLine: "5800원입니다.",
+                nextStep: '3-2',
+                forceNextLine: "요금은 5800원입니다."
+            },
+            {
+                id: '3-2',
+                emoji: "🚖",
+                agentFirst: true,
+                agentLine: "계산은 어떻게 하시겠어요?",
+                expectedIntent: "Payment method (카드/현금)",
+                hintText: "Comment vous voulez payer? “카드로 낼게요”",
+                successLine: "네, 알겠습니다.",
+                nextStep: '4-1',
+                forceNextLine: "네, 카드로 계산하겠습니다."
+            },
+            // --- 단계 4: 하차 ---
+            {
+                id: '4-1',
+                emoji: "💵",
+                agentFirst: true,
+                agentLine: "감사합니다, 안녕히 가세요.",
+                expectedIntent: "Farewell (작별 인사)",
+                hintText: "Dites merci et au revoir",
+                successLine: "", // Conversation ends
+                nextStep: null
+            }
+        ];
+
+        const sounds = {
+            success: new Tone.Synth().toDestination(),
+            fail: new Tone.Synth({ oscillator: { type: 'triangle' } }).toDestination(),
+            pop: new Tone.MembraneSynth().toDestination()
+        };
+
+        async function initAudio() {
+            if (!audioContextInitialized) { await Tone.start(); audioContextInitialized = true; }
+        }
+
+        // --- Flow Control ---
+        
+        startBtn.addEventListener('click', () => {
+            initAudio();
+            coverScreen.classList.remove('active');
+            chatScreen.classList.add('active');
+            startStep(0);
+        });
+
+        async function startStep(index) {
+            currentStepIndex = index;
+            const step = SCENARIO_STEPS[index];
+            
+            // Reset UI
+            clearTimers();
+            hideHint();
+            disableMicBtn();
+            
+            // Transition Delay (for driving scenes)
+            if (step.introDelay) {
+                statusEmoji.textContent = step.introEmoji || "🚕";
+                statusText.textContent = "En route...";
+                await wait(step.introDelay);
+            }
+
+            statusEmoji.textContent = step.emoji;
+
+            // Agent Speaks First?
+            if (step.agentFirst) {
+                await agentSpeak(step.agentLine);
+            }
+            
+            // Activate User Turn
+            activateUserTurn(step);
+        }
+
+        function activateUserTurn(step) {
+            enableMicBtn();
+            statusText.textContent = "À vous de parler !";
+            
+            // Start 5s Idle Timer
+            idleTimer = setTimeout(() => {
+                showHint(step);
+            }, 5000);
+        }
+
+        function showHint(step) {
+            // Show Hint Button first to grab attention
+            hintContainer.classList.remove('hidden');
+            
+            // When hint shown/clicked, start 5s countdown to force next
+            hintBtn.onclick = () => {
+                hintBtn.classList.add('hidden');
+                hintTextEl.textContent = step.hintText;
+                hintTextEl.classList.remove('hidden');
+                
+                // 5 seconds after revealing hint -> Force Next
+                hintDisplayTimer = setTimeout(() => {
+                    forceMoveToNext(step);
+                }, 5000);
+            };
+        }
+
+        function hideHint() {
+            hintContainer.classList.add('hidden');
+            hintTextEl.classList.add('hidden');
+            hintBtn.classList.remove('hidden');
+        }
+
+        function clearTimers() {
+            clearTimeout(idleTimer);
+            clearTimeout(hintDisplayTimer);
+        }
+
+        async function forceMoveToNext(step) {
+            clearTimers();
+            disableMicBtn();
+            addMessage("System", "Passons à la suite... (Temps écoulé)");
+            
+            // If there is a forced line (agent reacting to silence), say it
+            if (step.forceNextLine) {
+                await agentSpeak(step.forceNextLine);
+            }
+
+            goToNextStep(step);
+        }
+
+        async function goToNextStep(currentStep) {
+            if (currentStep.successEmoji) {
+                statusEmoji.textContent = currentStep.successEmoji;
+                await wait(1000);
+            }
+
+            if (currentStep.nextStep) {
+                const nextIndex = SCENARIO_STEPS.findIndex(s => s.id === currentStep.nextStep);
+                if (nextIndex !== -1) startStep(nextIndex);
+            } else {
+                // End of conversation
+                finishLesson();
+            }
+        }
+
+        function finishLesson() {
+            disableMicBtn();
+            statusText.textContent = "Terminé";
+            addMessage("System", "Conversation terminée. Bravo !");
+            window.parent.postMessage({ type: 'lesson_complete' }, '*');
+        }
+
+
+        // --- Interaction ---
+        
+        actionBtn.addEventListener('click', () => {
+            if (isRecording) stopRecording();
+            else if (!isAgentSpeaking && !actionBtn.disabled) startRecording();
+        });
+
+        function disableMicBtn() {
+            actionBtn.disabled = true;
+            actionBtn.classList.add('bg-slate-400');
+            actionBtn.classList.remove('bg-indigo-600', 'mic-recording');
+            actionBtn.innerHTML = "⏳";
+        }
+
+        function enableMicBtn() {
+            actionBtn.disabled = false;
+            actionBtn.classList.remove('bg-slate-400');
+            actionBtn.classList.add('bg-indigo-600');
+            actionBtn.innerHTML = "👄";
+        }
+
+
+        // --- Audio & API ---
+
+        async function agentSpeak(text) {
+            isAgentSpeaking = true;
+            disableMicBtn();
+            statusText.textContent = "L'agent parle...";
+            addMessage("Agent", text);
+            
+            agentAvatar.classList.remove('opacity-50', 'grayscale');
+            agentAvatar.classList.add('agent-speaking', 'opacity-100');
+            
+            try {
+                const response = await fetch(GEMINI_TTS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text, voice: "Orus" }) // 남성 목소리
+                });
+                
+                if (!response.ok) throw new Error(`TTS API status: ${response.status}`);
+                const data = await response.json();
+                
+                if (data.audioBase64) await playPCM(data.audioBase64);
+                else await wait(2000); // Fallback
+
+            } catch (e) {
+                console.warn("TTS Failed:", e);
+                await wait(2000);
+            } finally {
+                agentAvatar.classList.remove('agent-speaking', 'opacity-100');
+                agentAvatar.classList.add('opacity-50', 'grayscale');
+                isAgentSpeaking = false;
+            }
+        }
+
+        async function startRecording() {
+            if (!navigator.mediaDevices) { alert("Microphone non détecté"); return; }
+            clearTimers(); // Stop idle timer when user starts speaking
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = []; isRecording = true;
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstart = () => {
+                    actionBtn.innerHTML = "⏹️"; 
+                    actionBtn.classList.add('mic-recording'); 
+                    statusText.textContent = "Enregistrement... (Max 14s)";
+                    recordingTimeout = setTimeout(() => { if (isRecording) stopRecording(); }, 14000);
+                };
+                mediaRecorder.onstop = async () => {
+                    actionBtn.classList.remove('mic-recording'); 
+                    disableMicBtn();
+                    statusText.textContent = "Analyse...";
+                    isRecording = false; clearTimeout(recordingTimeout);
+                    
+                    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(blob);
+                    reader.onloadend = () => processUserAudio(reader.result);
+                    stream.getTracks().forEach(t => t.stop());
+                };
+                mediaRecorder.start();
+            } catch (e) { console.error(e); alert("Erreur micro"); }
+        }
+
+        function stopRecording() { if (mediaRecorder && isRecording) mediaRecorder.stop(); }
+
+        async function processUserAudio(base64Audio) {
+            try {
+                // 1. STT
+                const sttResponse = await fetch(CLOVA_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audioBase64: base64Audio, languageCode: "Kor" })
+                });
+                
+                const sttResult = await sttResponse.json();
+                const rawResult = sttResult.raw || sttResult;
+                const userText = rawResult.text;
+
+                if (!userText) {
+                    addMessage("System", "Je n'ai rien entendu. Réessayez.");
+                    enableMicBtn();
+                    return;
+                }
+                addMessage("User", userText);
+
+                // 2. Gemini Logic
+                const step = SCENARIO_STEPS[currentStepIndex];
+                const systemInstruction = `
+                당신은 한국의 친절한 택시 기사입니다.
+                현재 상황 의도: [${step.expectedIntent}]
+                유저의 발화: "${userText}"
+                
+                규칙:
+                1. 유저의 말이 위 의도에 부합하거나 자연스러운 대화라면: { "isCorrect": true, "reply": "자연스러운 응답" }
+                2. 전혀 엉뚱하거나 외국어라면: { "isCorrect": false, "reply": "잘 못 알아들었어요. 다시 말씀해 주세요." }
+                3. 반드시 JSON만 반환하세요.
+                `;
+
+                const geminiResponse = await fetch(GEMINI_CHAT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: userText, systemInstruction: systemInstruction })
+                });
+                
+                const geminiData = await geminiResponse.json();
+                let cleanJson = geminiData.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const aiLogic = JSON.parse(cleanJson);
+
+                if (aiLogic.isCorrect) {
+                    sounds.success.triggerAttackRelease("E4", "0.1");
+                    // Use Gemini's reply if available, otherwise use scenario default
+                    // But to ensure flow, we might want to use the hardcoded successLine for specific triggers?
+                    // Let's use Gemini's reply for naturalness, but check if we need to move on.
+                    // Actually, for this strict scenario, let's stick to our flow or use Gemini's reply if it matches?
+                    // The user prompt asked for specific agent responses. Let's prioritize Gemini but maybe override if needed?
+                    // No, let's use Gemini's reply as it makes it dynamic, BUT the scenario has "successLine".
+                    // Let's use the SCENARIO's successLine if it exists, otherwise Gemini.
+                    
+                    const reply = step.successLine || aiLogic.reply;
+                    if (reply) await agentSpeak(reply);
+                    
+                    goToNextStep(step);
+
+                } else {
+                    sounds.fail.triggerAttackRelease("C2", "0.2");
+                    await agentSpeak(aiLogic.reply); // "잘 못 알아들었어요..."
+                    // Retry same step
+                    activateUserTurn(step);
+                }
+
+            } catch (e) {
+                console.error(e);
+                addMessage("System", "Erreur. Réessayez.");
+                enableMicBtn();
+            }
+        }
+
+        // Helpers
+        function addMessage(sender, text) {
+            const div = document.createElement('div');
+            if (sender === "System") {
+                div.className = 'bubble bubble-system';
+            } else {
+                div.className = `bubble ${sender === 'User' ? 'bubble-user' : 'bubble-agent'}`;
+            }
+            div.textContent = text;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function playPCM(base64Data) {
+            return new Promise((resolve) => {
+                try {
+                    const binaryString = atob(base64Data);
+                    const len = binaryString.length;
+                    const bytes = new Uint8Array(len);
+                    for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+                    const wavBytes = pcmToWav(bytes, 24000); 
+                    const blob = new Blob([wavBytes], { type: 'audio/wav' });
+                    const url = URL.createObjectURL(blob);
+                    const audio = new Audio(url);
+                    audio.onended = resolve;
+                    audio.play().catch(resolve);
+                } catch (e) { console.error(e); resolve(); }
+            });
+        }
+
+        function pcmToWav(pcmData, sampleRate) {
+            const numChannels = 1; const bitsPerSample = 16; const byteRate = (sampleRate * numChannels * bitsPerSample) / 8; const blockAlign = (numChannels * bitsPerSample) / 8; const dataSize = pcmData.length; const buffer = new ArrayBuffer(44 + dataSize); const view = new DataView(buffer);
+            writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true); writeString(view, 36, 'data'); view.setUint32(40, dataSize, true);
+            const pcmBytes = new Uint8Array(buffer, 44); pcmBytes.set(pcmData); return buffer;
+        }
+        function writeString(view, offset, string) { for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i)); }
+
+        function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+    });
+    </script>
+</body>
+</html>
