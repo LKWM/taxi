@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cours de Coréen - Leçon 6</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for audio synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+             overflow: hidden;
+        }
+        /* Custom highlight class */
+        .highlight {
+            color: #16a34a; /* text-green-600 */
+            font-weight: 600;
+        }
+        /* 모바일/PC 꽉 차는 레이아웃 */
+        #app-container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #facc15; /* bg-yellow-400 */
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        /* 콘텐츠 영역 */
+        #page-content {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            padding-bottom: 8rem;
+        }
+        /* 마이크/네비게이션 스타일 */
+        .mic-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .mic-btn.recording {
+            background-color: #ef4444;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4);
+        }
+        .mic-btn.loading {
+            background-color: #6b7280;
+            cursor: not-allowed;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .nav-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem;
+            background-color: #facc15;
+            border-top: 1px solid #eab308;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+        @media (min-width: 640px) {
+            .nav-container { padding: 1.5rem; }
+            #page-content { padding-bottom: 6rem; }
+        }
+        #next-btn:disabled {
+            background-color: #9ca3af;
+            color: #e5e7eb;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        #prev-btn:disabled {
+             opacity: 0.5;
+             cursor: not-allowed;
+        }
+        /* 퀴즈 피드백 영역 */
+        .feedback-message {
+            min-height: 2rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+        }
+        @media (min-width: 640px) {
+             .feedback-message {
+                 font-size: 1rem;
+             }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen h-screen p-2 sm:p-4">
+
+    <!-- App Container -->
+    <div id="app-container">
+        <!-- Page Content -->
+        <div id="page-content" class="flex flex-col justify-center">
+            <!-- Content appears here -->
+        </div>
+
+        <!-- Navigation -->
+        <div id="navigation" class="nav-container">
+             <div class="justify-self-start">
+                 <button id="prev-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">Précédent</button>
+             </div>
+            
+             <div class="flex-grow sm:flex-grow-0 sm:w-1/2 h-2 bg-yellow-600 rounded-full overflow-hidden mx-2">
+                 <div id="progress-indicator" class="h-full bg-white transition-all duration-300"></div>
+             </div>
+            
+             <div class="justify-self-end flex gap-2">
+                 <button id="retry-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Réessayer</button>
+                 <button id="passer-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Passer</button>
+                 <button id="next-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">
+                     Suivant
+                 </button>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        function playAudio(url) {
+            if (!url || url.startsWith('URL_PLACEHOLDER_')) {
+                console.warn('Audio URL is a placeholder or invalid:', url);
+                return;
+            }
+            try {
+                const audio = new Audio(url);
+                audio.play().catch(e => {
+                    console.error("Error playing audio:", e.name, e.message);
+                    const statusEl = document.querySelector('.speech-status-indicator:not(.hidden)');
+                    if (statusEl) {
+                        statusEl.innerText = "Désolé, l'audio n'a pas pu être chargé.";
+                        statusEl.className = 'speech-status-indicator text-center text-red-500 mt-4';
+                    }
+                });
+            } catch (e) {
+                console.error("Error creating audio element:", e);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 1. STATE AND DATA ---
+            let currentPage = 0;
+            let scores = [];
+            let attempts = {};
+            let soundsReady = false;
+            let audioPlayTimeout = null;
+
+            const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+            const CLOVA_API_FUNCTION_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+            
+            // Audio synth
+            let pageTurnSynth, correctSound, wrongSound, completionSynth;
+            if (typeof Tone !== 'undefined') {
+                pageTurnSynth = new Tone.Synth().toDestination();
+                completionSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                correctSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.2 } }).toDestination();
+                wrongSound = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0.1, release: 0.2 } }).toDestination();
+            }
+
+            const initAudioSynth = async () => {
+                if (soundsReady) return;
+                try {
+                    await Tone.start();
+                    soundsReady = true;
+                    console.log('Audio context started.');
+                } catch (e) {
+                    console.error("Audio context could not be started: ", e);
+                }
+            };
+            document.body.addEventListener('click', initAudioSynth, { once: true });
+            document.body.addEventListener('touchstart', initAudioSynth, { once: true });
+            
+            // [*** 수정 ***] Leçon 6 페이지 데이터
+            const pages = [
+                // Page 1: Cover (Intro)
+                { 
+                    type: 'text', 
+                    title: 'Leçon 6 : Payer', 
+                    content: 'Appuyez sur "Suivant" pour commencer !'
+                },
+                
+                // Page 2: Intro (Exp 1)
+                { 
+                    type: 'text', 
+                    content: 'Bonjour, dans cette leçon, nous allons apprendre les expressions à utiliser lorsque l\'on paie le prix d\'une course de taxi.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763794868/lec%CC%A7on6-clip1_rl1nfd.mp3' 
+                },
+                
+                // Page 3: Exp 2 + Card (얼마예요?) - [합침]
+                { 
+                    type: 'text_then_vocab', 
+                    content: 'Nous sommes arrivés à destination. Demandons au chauffeur quel est le montant de la course.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763794892/lec%CC%A7on6-clip2_rrms02.mp3',
+                    ko: '얼마예요?', 
+                    fr: 'Ça coûte combien ?', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793557/%E1%84%8B%E1%85%A5%E1%86%AF%E1%84%86%E1%85%A1%E1%84%8B%E1%85%A8%E1%84%8B%E1%85%AD_nxu3jk.mp3'
+                },
+                
+                // Page 4: Card (얼마예요?) + Exp 3
+                { 
+                    type: 'text_with_vocab', 
+                    ko: '얼마예요?', 
+                    fr: 'Ça coûte combien ?', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793557/%E1%84%8B%E1%85%A5%E1%86%AF%E1%84%86%E1%85%A1%E1%84%8B%E1%85%A8%E1%84%8B%E1%85%AD_nxu3jk.mp3', 
+                    content: 'Vous pouvez aussi vérifier le prix de la course sur le compteur. 1 000 wons équivalent à environ 60 centimes d\'euro.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763794893/lec%CC%A7on6-clip3_jzmpwo.mp3'
+                },
+                // Page 5: Card (Repeat)
+                { type: 'vocab', ko: '얼마예요?', fr: 'Ça coûte combien ?', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793557/%E1%84%8B%E1%85%A5%E1%86%AF%E1%84%86%E1%85%A1%E1%84%8B%E1%85%A8%E1%84%8B%E1%85%AD_nxu3jk.mp3', subtitle: 'Répétez encore une fois' },
+                
+                // Page 6: Exp 4 + Card (현금으로 낼게요) - [합침]
+                { 
+                    type: 'text_then_vocab', 
+                    content: 'Il y a plusieurs façons de payer un taxi. Tout d\'abord, répétez l\'expression que vous pouvez utiliser pour payer en espèces.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763794912/lec%CC%A7on6-clip4_bclrl3.mp3',
+                    ko: '현금으로 낼게요.', 
+                    fr: 'Je vais payer en espèces.', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793562/%E1%84%92%E1%85%A7%E1%86%AB%E1%84%80%E1%85%B3%E1%86%B7%E1%84%8B%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%82%E1%85%A2%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_mbajlt.mp3' 
+                },
+                
+                // Page 7: Card + Exp 5
+                { 
+                    type: 'text_with_vocab', 
+                    ko: '현금으로 낼게요.', 
+                    fr: 'Je vais payer en espèces.', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793562/%E1%84%92%E1%85%A7%E1%86%AB%E1%84%80%E1%85%B3%E1%86%B7%E1%84%8B%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%82%E1%85%A2%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_mbajlt.mp3',
+                    content: '<현금> signifie espèces. Dans cette phrase, nous avons utilisé le verbe <내다>. Il signifie payer et est plus souvent utilisé dans un contexte de conversation informelle que 지불하다.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1764066052/lec%CC%A7on6-clip5_fq0ztt.mp3'
+                },
+                // Page 8: Card (Repeat)
+                { type: 'vocab', ko: '현금으로 낼게요.', fr: 'Je vais payer en espèces.', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793562/%E1%84%92%E1%85%A7%E1%86%AB%E1%84%80%E1%85%B3%E1%86%B7%E1%84%8B%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%82%E1%85%A2%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_mbajlt.mp3', subtitle: 'Répétez encore une fois' },
+
+                // Page 9: Exp 6 + Card (카드로 할게요) - [합침]
+                { 
+                    type: 'text_then_vocab', 
+                    content: 'Que dire si l\'on veut payer par carte bleue ?',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1764066054/lec%CC%A7on6-clip6_agzobn.mp3',
+                    ko: '카드로 할게요.', 
+                    fr: 'Je vais payer par carte.', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793559/%E1%84%8F%E1%85%A1%E1%84%83%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%92%E1%85%A1%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_kxodqs.mp3'
+                },
+                
+                // Page 10: Card + Exp 7
+                { 
+                    type: 'text_with_vocab', 
+                    ko: '카드로 할게요.', 
+                    fr: 'Je vais payer par carte.', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793559/%E1%84%8F%E1%85%A1%E1%84%83%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%92%E1%85%A1%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_kxodqs.mp3',
+                    content: '할게요 est une forme où le COD est naturellement omis dans les verbes tels que “결제하다” ou “지불하다”. Dans les situations impliquant de l\'argent, dire “..으로 할게요” signifie que vous allez payer en utilisant ce moyen.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1764066060/lec%CC%A7on6-clip7_lo5oer.mp3'
+                },
+                // Page 11: Card (Repeat)
+                { type: 'vocab', ko: '카드로 할게요.', fr: 'Je vais payer par carte.', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793559/%E1%84%8F%E1%85%A1%E1%84%83%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%92%E1%85%A1%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_kxodqs.mp3', subtitle: 'Répétez encore une fois' },
+                
+                // Page 12: Exp 8 + Card (티머니로 결제 돼요?) - [합침]
+                { 
+                    type: 'text_then_vocab', 
+                    content: 'Certains taxis acceptent également le paiement par Tmoney, une carte de transport en commun.',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1764066059/lec%CC%A7on6-clip8_bzukxa.mp3',
+                    ko: '티머니로 결제 돼요?', 
+                    fr: 'Je peux payer par T-money ?', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793561/%E1%84%90%E1%85%B5%E1%84%86%E1%85%A5%E1%84%82%E1%85%B5%E1%84%85%E1%85%A9_%E1%84%80%E1%85%A7%E1%86%AF%E1%84%8C%E1%85%A6_%E1%84%83%E1%85%AB%E1%84%8B%E1%85%AD_q33i06.mp3' 
+                },
+                
+                // Page 13: Card + Exp 9
+                { 
+                    type: 'text_with_vocab', 
+                    ko: '티머니로 결제 돼요?', 
+                    fr: 'Je peux payer par T-money ?', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793561/%E1%84%90%E1%85%B5%E1%84%86%E1%85%A5%E1%84%82%E1%85%B5%E1%84%85%E1%85%A9_%E1%84%80%E1%85%A7%E1%86%AF%E1%84%8C%E1%85%A6_%E1%84%83%E1%85%AB%E1%84%8B%E1%85%AD_q33i06.mp3',
+                    content: '“되다” signifie être possible, et est une expression qui peut être utilisée de manière plus informelle que ‘할 수 있어요’ (pouvoir faire).',
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1764066065/lec%CC%A7on6-clip9_mc5wjm.mp3'
+                },
+                // Page 14: Vocab (Repeat)
+                { type: 'vocab', ko: '티머니로 결제 돼요?', fr: 'Je peux payer par T-money ?', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793561/%E1%84%90%E1%85%B5%E1%84%86%E1%85%A5%E1%84%82%E1%85%B5%E1%84%85%E1%85%A9_%E1%84%80%E1%85%A7%E1%86%AF%E1%84%8C%E1%85%A6_%E1%84%83%E1%85%AB%E1%84%8B%E1%85%AD_q33i06.mp3', subtitle: 'Répétez encore une fois' },
+
+                // Page 15: Quiz 1
+                { 
+                    type: 'quiz', 
+                    question: 'Que pouvez-vous dire pour demander combien coûte-t-il ?',
+                    options: [
+                        { ko: '계산이에요', fr: 'C\'est le calcul.' }, 
+                        { ko: '얼마예요?', fr: 'Ça coûte combien ?', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793557/%E1%84%8B%E1%85%A5%E1%86%AF%E1%84%86%E1%85%A1%E1%84%8B%E1%85%A8%E1%84%8B%E1%85%AD_nxu3jk.mp3' }, 
+                        { ko: '돈이에요?', fr: 'C\'est de l\'argent ?' }
+                    ], 
+                    correct: 1 
+                },
+                // Page 16: Quiz 2 (Review)
+                { 
+                    type: 'quiz', 
+                    question: 'Que pouvez-vous dire pour demander combien de temps ça prend ?',
+                    options: [
+                        { ko: '시간이 걸려요?', fr: 'Ça prend du temps ?' }, 
+                        { ko: '언제예요?', fr: 'C\'est quand ?' }, 
+                        { ko: '얼마나 걸려요?', fr: 'Combien de temps ça prend ?', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763375233/%E1%84%8B%E1%85%A5%E1%86%AF%E1%84%86%E1%85%A1%E1%84%82%E1%85%A1_%E1%84%80%E1%85%A5%E1%86%AF%E1%84%85%E1%85%A7%E1%84%8B%E1%85%AD_zwtpeg.mp3' } 
+                    ], 
+                    correct: 2 
+                },
+                // Page 17: Quiz 3 (Review)
+                { 
+                    type: 'quiz', 
+                    question: 'Que pouvez-vous dire pour exiger de calculer par un taximètre ?',
+                    options: [
+                        { ko: '티머니로 계산해 주세요.', fr: 'Calculez par T-money, s\'il vous plaît.' }, 
+                        { ko: '미터기를 꺼 주세요.', fr: 'Éteignez le compteur, s’il vous plaît.' }, 
+                        { ko: '미터기로 계산해 주세요.', fr: 'Calculez par le compteur, s\'il vous plaît.', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763467345/%E1%84%86%E1%85%B5%E1%84%90%E1%85%A5%E1%84%80%E1%85%B5%E1%84%85%E1%85%A9_%E1%84%80%E1%85%A8%E1%84%89%E1%85%A1%E1%86%AB%E1%84%92%E1%85%A2_%E1%84%8C%E1%85%AE%E1%84%89%E1%85%A6%E1%84%8B%E1%85%AD_uct28i.mp3' }
+                    ], 
+                    correct: 2 
+                },
+                // Page 18: Quiz 4
+                { 
+                    type: 'quiz', 
+                    question: 'Que pouvez-vous dire pour payer en espèces ?',
+                    options: [
+                        { ko: '돈을 내요.', fr: 'Je paie l\'argent.' }, 
+                        { ko: '현금으로 낼게요.', fr: 'Je vais payer en espèces.', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793562/%E1%84%92%E1%85%A7%E1%86%AB%E1%84%80%E1%85%B3%E1%86%B7%E1%84%8B%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%82%E1%85%A2%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_mbajlt.mp3' }, 
+                        { ko: '현금이 있어요.', fr: 'J\'ai des espèces.' }
+                    ], 
+                    correct: 1 
+                },
+                // Page 19: Quiz 5
+                { 
+                    type: 'quiz', 
+                    question: 'Que pouvez-vous dire pour payer par carte ?',
+                    options: [
+                        { ko: '카드예요.', fr: 'C\'est une carte.' }, 
+                        { ko: '카드 좀 주세요.', fr: 'Donnez-moi la carte, s\'il vous plaît.' }, 
+                        { ko: '카드가 얼마예요?', fr: 'Combien coûte la carte ?' },
+                        { ko: '카드로 낼게요.', fr: 'Je vais payer par carte.', audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793558/%E1%84%8F%E1%85%A1%E1%84%83%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%82%E1%85%A2%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_k4somg.mp3' }
+                    ], 
+                    correct: 3 
+                },
+
+                // Page 20: Speech Quiz 1
+                { 
+                    type: 'speech_quiz', 
+                    ko: '얼마예요?', 
+                    fr: 'Dire : “Combien ça coûte ?”', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793557/%E1%84%8B%E1%85%A5%E1%86%AF%E1%84%86%E1%85%A1%E1%84%8B%E1%85%A8%E1%84%8B%E1%85%AD_nxu3jk.mp3' 
+                },
+                // Page 21: Speech Quiz 2
+                { 
+                    type: 'speech_quiz', 
+                    ko: '티머니로 결제 돼요?', 
+                    fr: 'Dire : “Je peux payer par T-money ?”', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793561/%E1%84%90%E1%85%B5%E1%84%86%E1%85%A5%E1%84%82%E1%85%B5%E1%84%85%E1%85%A9_%E1%84%80%E1%85%A7%E1%86%AF%E1%84%8C%E1%85%A6_%E1%84%83%E1%85%AB%E1%84%8B%E1%85%AD_q33i06.mp3' 
+                },
+                // Page 22: Speech Quiz 3
+                { 
+                    type: 'speech_quiz', 
+                    ko: '카드로 할게요.', 
+                    fr: 'Dire : “Je vais payer par carte.”', 
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793559/%E1%84%8F%E1%85%A1%E1%84%83%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%92%E1%85%A1%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_kxodqs.mp3' 
+                },
+                // Page 23: Speech Quiz 4
+                { 
+                    type: 'speech_quiz', 
+                    ko: '현금으로 낼게요.', 
+                    fr: 'Dire : “Je vais payer en espèces.”', 
+                    // [수정] 오디오 교체
+                    audio: 'https://res.cloudinary.com/de76i94ia/video/upload/v1763793562/%E1%84%92%E1%85%A7%E1%86%AB%E1%84%80%E1%85%B3%E1%86%B7%E1%84%8B%E1%85%B3%E1%84%85%E1%85%A9_%E1%84%82%E1%85%A2%E1%86%AF%E1%84%80%E1%85%A6%E1%84%8B%E1%85%AD_mbajlt.mp3' 
+                },
+                // Page 24: Finish (Exp 10)
+                { 
+                    type: 'text', 
+                    title: 'Félicitations !', 
+                    content: 'Bien joué ! Maintenant, vous êtes capable de payer une fois arrivé à destination. La prochaine Leçon 7 est le dernier cours de ce programme. Bon travail et à bientôt !', 
+                    audioFr: 'https://res.cloudinary.com/de76i94ia/video/upload/v1764066062/lec%CC%A7on6-clip10_s8hub5.mp3'
+                }
+            ];
+            
+            const totalPages = pages.length;
+            scores = Array(totalPages).fill(null); 
+            
+            // --- [추가] Naver API 연동 ---
+            let mediaRecorder;
+            let audioChunks = [];
+            let isRecording = false;
+            let recordingTimeout;
+
+            async function startRecording(quizIndex) {
+                if (isRecording) return;
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    alert("Votre navigateur ne supporte pas l'enregistrement audio.");
+                    return;
+                }
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    isRecording = true;
+                    audioChunks = [];
+                    let mimeType = 'audio/webm;codecs=opus';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/webm';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+                    
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType }); 
+                    mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+                    mediaRecorder.onstart = () => {
+                        document.querySelector(`#mic-btn-${quizIndex}`)?.classList.add('recording');
+                        document.querySelector(`#speech-status-${quizIndex}`).textContent = "J'écoute...";
+                        document.querySelector(`#speech-status-${quizIndex}`).className = 'speech-status-indicator feedback-message text-center text-gray-700';
+                        
+                        clearTimeout(recordingTimeout);
+                        recordingTimeout = setTimeout(() => { if (isRecording) stopRecording(quizIndex); }, 10000);
+                    };
+                    mediaRecorder.onstop = () => {
+                        isRecording = false;
+                        clearTimeout(recordingTimeout);
+                        document.querySelector(`#mic-btn-${quizIndex}`)?.classList.remove('recording');
+                        document.querySelector(`#mic-btn-${quizIndex}`)?.classList.add('loading');
+                        document.querySelector(`#speech-status-${quizIndex}`).textContent = "Évaluation en cours...";
+
+                        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = () => {
+                            handlePronunciationEvaluation(quizIndex, reader.result);
+                        };
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    mediaRecorder.start();
+                } catch (err) {
+                    console.error("Error starting recording:", err);
+                    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                        alert("Impossible d'accéder au microphone. Veuillez autoriser l'accès.");
+                    } else {
+                        alert(`Erreur microphone: ${err.name}. Veuillez réessayer.`);
+                    }
+                }
+            }
+
+            function stopRecording(quizIndex) {
+                clearTimeout(recordingTimeout);
+                if (mediaRecorder && isRecording) mediaRecorder.stop();
+            }
+
+            function normalizeText(text) {
+                if (typeof text !== 'string') return '';
+                return text.trim().replace(/[.,!?'\s]/g, '');
+            }
+
+            async function handlePronunciationEvaluation(quizIndex, audioBase64) {
+                const quiz = pages[quizIndex];
+                const feedbackEl = document.querySelector(`#speech-status-${quizIndex}`);
+                const micBtn = document.querySelector(`#mic-btn-${quizIndex}`);
+                const attemptsEl = document.querySelector(`#attempts-${quizIndex}`);
+                
+                if (attempts[quizIndex] === undefined) attempts[quizIndex] = 0;
+                attempts[quizIndex]++;
+                const isFirstAttempt = attempts[quizIndex] === 1;
+                
+                try {
+                    const response = await fetch(CLOVA_API_FUNCTION_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            audioBase64: audioBase64,
+                            languageCode: "Kor", 
+                            referenceText: quiz.ko
+                        })
+                    });
+        
+                    if (!response.ok) {
+                        let errorDetails = "Erreur inconnue";
+                        const errorText = await response.text(); 
+                        try { const errorResult = JSON.parse(errorText); errorDetails = errorResult.error || JSON.stringify(errorResult); }
+                        catch (e) { errorDetails = errorText; }
+                        throw new Error(`Erreur du backend (${response.status}): ${errorDetails}`);
+                    }
+                    
+                    const result = await response.json(); 
+                    const transcribedText = result.text || '';
+                    const score = (result.assessment ? result.assessment.pronunciation_score : 0) || 0;
+
+                    const normalizedTranscribed = normalizeText(transcribedText);
+                    const normalizedReference = normalizeText(quiz.ko);
+                    
+                    const isTextMatch = (normalizedTranscribed === normalizedReference);
+                    const isScorePass = score >= 80;
+                    
+                    const isCorrect = isTextMatch && isScorePass; 
+    
+                    if (isCorrect) {
+                        scores[quizIndex] = 1;
+                        correctSound?.triggerAttackRelease('C5', '0.2s');
+                        if(micBtn) micBtn.disabled = true;
+                        if(feedbackEl) {
+                            feedbackEl.innerHTML = `Très bien ! "${transcribedText}"<br>(Réponse: <span class="font-bold">${quiz.ko}</span>)`;
+                            feedbackEl.className = 'speech-status-indicator feedback-message text-center text-green-600';
+                        }
+                        if(attemptsEl) attemptsEl.textContent = 'Terminé !';
+
+                        const aideBtn = document.querySelector(`#aide-btn-${quizIndex}`);
+                        if (aideBtn) aideBtn.style.display = 'none';
+
+                    } else {
+                        if (isFirstAttempt) {
+                            scores[quizIndex] = null;
+                            wrongSound?.triggerAttackRelease('A#2', '0.2s');
+                            if(feedbackEl) {
+                                feedbackEl.textContent = `J'ai entendu : "${transcribedText || '...'}" (Score: ${score}). Écoutez et parlez à nouveau.`; 
+                                feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                            }
+                            if(attemptsEl) attemptsEl.textContent = 'Tentatives restantes : 1';
+
+                            const speechContainer = feedbackEl.parentElement;
+                            if (speechContainer && !document.querySelector(`#aide-btn-${quizIndex}`)) {
+                                const aideBtn = document.createElement('button');
+                                aideBtn.id = `aide-btn-${quizIndex}`;
+                                aideBtn.className = 'w-full bg-amber-500 text-white font-semibold py-2 px-4 rounded-full shadow-md hover:bg-amber-600 transition duration-300 text-sm mt-3';
+                                aideBtn.innerHTML = 'Aide 💡 Écouter';
+                                aideBtn.onclick = () => playAudio(quiz.audio);
+                                speechContainer.appendChild(aideBtn);
+                            }
+
+                        } else {
+                            scores[quizIndex] = 0;
+                            wrongSound?.triggerAttackRelease('A#2', '0.2s');
+                            if(feedbackEl) {
+                                feedbackEl.innerHTML = `Réponse: <span class="font-bold">${quiz.ko}</span> (Votre score: ${score} / 100)`;
+                                feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                            }
+                            if(micBtn) micBtn.disabled = true;
+                            if(attemptsEl) attemptsEl.textContent = 'Tentatives épuisées.';
+
+                            const aideBtn = document.querySelector(`#aide-btn-${quizIndex}`);
+                            if (aideBtn) aideBtn.style.display = 'none';
+                        }
+                    }
+                    
+                    window.parent.postMessage({
+                        type: 'pronunciation_result',
+                        quizId: quizIndex,
+                        naverScore: score,
+                        pointsAwarded: scores[quizIndex],
+                        transcribedText: transcribedText,
+                        referenceText: quiz.ko,
+                        isCorrect: isCorrect,
+                        attempt: attempts[quizIndex],
+                        assessment: result.assessment || { pronunciation_score: score }
+                    }, '*');
+
+                } catch (error) {
+                    console.error("Erreur lors de l'évaluation:", error); 
+                    if(feedbackEl) {
+                        feedbackEl.textContent = `Erreur de connexion. Veuillez réessayer.`;
+                        feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                    }
+                    if (attempts[quizIndex] > 0) attempts[quizIndex]--; 
+                } finally {
+                    if(micBtn) micBtn.classList.remove('loading');
+                    updateNavButtons(); 
+                }
+            }
+
+            function createSimpleVocabCard(data, quizIndex) {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center mb-4 sm:mb-6';
+                
+                const audioArea = document.createElement('div');
+                audioArea.className = 'cursor-pointer hover:bg-gray-100 transition duration-300 p-2 rounded-lg w-full';
+                audioArea.onclick = () => playAudio(data.audio);
+
+                const koText = document.createElement('h2');
+                koText.className = 'text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2 text-center';
+                koText.innerText = data.ko;
+                audioArea.appendChild(koText);
+
+                const frText = document.createElement('p');
+                frText.className = 'text-base sm:text-lg text-gray-600 text-center';
+                frText.innerText = data.fr;
+                audioArea.appendChild(frText);
+                
+                const icon = document.createElement('span');
+                icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400 mt-2 mx-auto"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>';
+                audioArea.appendChild(icon);
+                
+                card.appendChild(audioArea);
+                return card;
+            }
+
+            function createVocabCard(data, quizIndex) {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center';
+
+                if (data.subtitle) {
+                    const subtitleEl = document.createElement('p');
+                    subtitleEl.className = 'text-lg sm:text-xl font-semibold text-gray-700 mb-4 text-center';
+                    subtitleEl.innerText = data.subtitle;
+                    card.appendChild(subtitleEl);
+                }
+
+                const koText = document.createElement('h2');
+                koText.className = 'text-3xl sm:text-4xl font-bold text-gray-900 mb-2 text-center';
+                koText.innerText = data.ko;
+                card.appendChild(koText);
+
+                const frText = document.createElement('p');
+                frText.className = 'text-lg sm:text-xl text-gray-600 mb-4 sm:mb-6 text-center';
+                frText.innerText = data.fr;
+                card.appendChild(frText);
+
+                const audioBtn = document.createElement('button');
+                audioBtn.className = 'w-full bg-green-600 text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-full shadow-md hover:bg-green-700 transition duration-300 flex items-center justify-center gap-2 text-sm sm:text-base';
+                audioBtn.innerHTML = 'Écoutez <span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg></span>';
+                audioBtn.onclick = () => playAudio(data.audio);
+                card.appendChild(audioBtn);
+
+                card.appendChild(createSpeechSection(quizIndex, data, 'Répétez'));
+                return card;
+            }
+
+            function createSpeechQuizCard(data, quizIndex) {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center justify-center flex-grow';
+
+                const frText = document.createElement('p');
+                frText.className = 'text-2xl sm:text-3xl font-bold text-gray-900 mb-4 sm:mb-6 text-center';
+                frText.innerText = data.fr;
+                card.appendChild(frText);
+
+                card.appendChild(createSpeechSection(quizIndex, data, 'Parlez')); 
+                return card;
+            }
+
+            function createSpeechSection(quizIndex, pageData, buttonText = 'Répétez') {
+                const correctKoreanText = pageData.ko;
+                
+                const speechContainer = document.createElement('div');
+                speechContainer.className = 'w-full flex flex-col items-center mt-4';
+                
+                const repeatBtn = document.createElement('button');
+                repeatBtn.id = `mic-btn-${quizIndex}`;
+                repeatBtn.className = 'w-full mic-btn bg-sky-500 text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-full shadow-md hover:bg-sky-600 transition duration-300 flex items-center justify-center gap-2 text-sm sm:text-base';
+                repeatBtn.innerHTML = `${buttonText} <span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span>`;
+                
+                speechContainer.appendChild(repeatBtn);
+
+                const speechStatus = document.createElement('p');
+                speechStatus.id = `speech-status-${quizIndex}`;
+                speechStatus.className = 'speech-status-indicator feedback-message text-center h-6 text-sm sm:text-base';
+                speechContainer.appendChild(speechStatus);
+                
+                const transcriptEl = document.createElement('p');
+                transcriptEl.id = `transcript-${quizIndex}`;
+                transcriptEl.className = 'text-base sm:text-lg text-slate-500 h-6 mt-1';
+                speechContainer.appendChild(transcriptEl);
+
+                const attemptsEl = document.createElement('div');
+                attemptsEl.id = `attempts-${quizIndex}`;
+                attemptsEl.className = 'text-xs sm:text-sm text-slate-400 mt-1';
+                attemptsEl.textContent = 'Tentatives restantes : 2';
+                speechContainer.appendChild(attemptsEl);
+
+                const currentAttempts = attempts[quizIndex] || 0;
+                const currentScore = scores[quizIndex];
+                
+                attemptsEl.textContent = `Tentatives restantes : ${Math.max(0, 2 - currentAttempts)}`;
+
+                if (currentScore === 1) {
+                    repeatBtn.disabled = true;
+                    speechStatus.innerHTML = `Très bien ! (Réponse: <span class="font-bold">${correctKoreanText}</span>)`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-green-600';
+                    attemptsEl.textContent = 'Terminé !';
+                } else if (currentScore === 0) {
+                    repeatBtn.disabled = true;
+                    speechStatus.innerHTML = `Réponse: <span class="font-bold">${correctKoreanText}</span>`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                    attemptsEl.textContent = 'Tentatives épuisées.';
+                } else if (currentAttempts >= 2) {
+                    repeatBtn.disabled = true;
+                    speechStatus.innerHTML = `Réponse: <span class="font-bold">${correctKoreanText}</span>`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                    attemptsEl.textContent = 'Tentatives épuisées.';
+                    if(currentScore === null) scores[quizIndex] = 0;
+                } else if (currentAttempts === 1) {
+                    speechStatus.textContent = `Écoutez et parlez à nouveau.`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-red-500';
+
+                    if (speechContainer && !document.querySelector(`#aide-btn-${quizIndex}`)) {
+                        const aideBtn = document.createElement('button');
+                        aideBtn.id = `aide-btn-${quizIndex}`;
+                        aideBtn.className = 'w-full bg-amber-500 text-white font-semibold py-2 px-4 rounded-full shadow-md hover:bg-amber-600 transition duration-300 text-sm mt-3';
+                        aideBtn.innerHTML = 'Aide 💡 Écouter';
+                        aideBtn.onclick = () => playAudio(pageData.audio);
+                        speechContainer.appendChild(aideBtn);
+                    }
+                }
+
+                repeatBtn.onclick = () => {
+                    const currentAttemptsOnClick = attempts[quizIndex] || 0;
+                    if (repeatBtn.disabled || repeatBtn.classList.contains('loading')) return;
+                    
+                    if (currentAttemptsOnClick >= 2) {
+                        return; 
+                    }
+                    
+                    if (isRecording) stopRecording(quizIndex);
+                    else {
+                        initAudioSynth(); 
+                        startRecording(quizIndex);
+                    }
+                };
+
+                return speechContainer;
+            }
+
+            function createQuizCard(data, quizIndex) {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center';
+
+                const questionText = document.createElement('p');
+                questionText.className = 'text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6 text-center';
+                questionText.innerText = data.question;
+                card.appendChild(questionText);
+
+                const optionsContainer = document.createElement('form'); 
+                optionsContainer.id = `quiz-form-${quizIndex}`;
+                optionsContainer.className = 'w-full flex flex-col gap-3';
+                
+                data.options.forEach((option, index) => {
+                    const optionBtn = document.createElement('button');
+                    optionBtn.type = 'button'; 
+                    optionBtn.className = 'quiz-option-btn w-full bg-gray-100 text-gray-800 font-medium p-3 sm:p-4 rounded-xl shadow-sm hover:bg-gray-200 transition duration-300 text-lg sm:text-xl text-center'; 
+                    optionBtn.innerHTML = `<span class="font-bold">${option.ko}</span>`;
+                    optionBtn.dataset.index = index;
+                    
+                    optionBtn.addEventListener('click', () => {
+                        checkAnswer(optionBtn, index, data.correct);
+                    });
+                    
+                    optionsContainer.appendChild(optionBtn);
+                });
+
+                card.appendChild(optionsContainer);
+                
+                const quizFeedback = document.createElement('p');
+                quizFeedback.id = `quiz-feedback-${quizIndex}`;
+                quizFeedback.className = 'quiz-feedback-indicator feedback-message text-center h-6 text-sm sm:text-base';
+                card.appendChild(quizFeedback);
+
+                return card;
+            }
+
+            window.nextPage = function() {
+                if (document.getElementById('next-btn').disabled) return;
+                if (currentPage < pages.length - 1) {
+                    currentPage++;
+                    renderPage();
+                    playPageTurnSound();
+                }
+                
+                if (currentPage === pages.length - 1) {
+                     window.parent.postMessage({ type: 'lesson_complete' }, '*');
+                }
+            }
+
+            window.prevPage = function() {
+                if (document.getElementById('prev-btn').disabled) return;
+                if (currentPage > 0) {
+                    currentPage--;
+                    renderPage();
+                    playPageTurnSound();
+                }
+            }
+
+            function updateNavButtons() {
+                const prevBtn = document.getElementById('prev-btn');
+                const nextBtn = document.getElementById('next-btn');
+                const retryBtn = document.getElementById('retry-btn');
+                const passerBtn = document.getElementById('passer-btn');
+
+                prevBtn.disabled = (currentPage === 0);
+                
+                const isLastPage = currentPage === pages.length - 1;
+                nextBtn.style.visibility = isLastPage ? 'hidden' : 'visible';
+                
+                passerBtn.classList.add('hidden');
+                retryBtn.classList.add('hidden');
+
+                const pageData = pages[currentPage];
+                const quizIndex = currentPage;
+                
+                if (pageData.type === 'quiz') { 
+                    const isAnswered = scores[quizIndex] !== null;
+                    nextBtn.disabled = !isAnswered;
+                    
+                    if (scores[quizIndex] === 0) {
+                         retryBtn.classList.remove('hidden');
+                         nextBtn.disabled = true;
+                    }
+                } 
+                else if (pageData.type === 'vocab' || pageData.type === 'speech_quiz') {
+                    nextBtn.disabled = false;
+
+                    if ((attempts[quizIndex] || 0) >= 2 && scores[quizIndex] === 0) {
+                        passerBtn.classList.remove('hidden');
+                    }
+                }
+                else {
+                    nextBtn.disabled = isLastPage;
+                }
+            }
+
+            function playPageTurnSound() {
+                const isLastPage = currentPage === pages.length - 1;
+                if (isLastPage && completionSynth) {
+                    completionSynth.triggerAttackRelease(["C5", "E5", "G5"], "4n", Tone.now());
+                } else if (pageTurnSynth) {
+                    pageTurnSynth.triggerAttackRelease("C5", "8n", Tone.now());
+                }
+            }
+
+            function highlightText(text) {
+                return text.replace(/<([^>]+)>/g, '<span class="highlight">$1</span>');
+            }
+
+            function checkAnswer(buttonElement, selectedIndex, correctIndex) {
+                const quizIndex = currentPage;
+                if (scores[quizIndex] !== null) return; 
+
+                initAudioSynth(); 
+                
+                const allOptionButtons = buttonElement.parentElement.querySelectorAll('button');
+                const feedbackEl = document.getElementById(`quiz-feedback-${quizIndex}`);
+                const pageData = pages[quizIndex];
+                
+                attempts[quizIndex] = (attempts[quizIndex] || 0) + 1;
+
+                if (selectedIndex === correctIndex) {
+                    scores[quizIndex] = attempts[quizIndex] === 1 ? 2 : 1;
+                    
+                    if (pageData.options[selectedIndex].audio && !pageData.options[selectedIndex].audio.startsWith('URL_PLACEHOLDER_')) {
+                        playAudio(pageData.options[selectedIndex].audio);
+                    }
+                    
+                    buttonElement.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+                    buttonElement.classList.add('bg-green-500', 'text-white');
+                    if (feedbackEl) {
+                        feedbackEl.textContent = 'Très bien !';
+                        feedbackEl.className = 'quiz-feedback-indicator text-center font-medium mt-4 h-6 text-green-600';
+                    }
+                    correctSound?.triggerAttackRelease('C5', '0.2s');
+                    allOptionButtons.forEach(btn => { btn.disabled = true; });
+
+                    allOptionButtons.forEach((btn, index) => {
+                        btn.innerHTML = `<span class="font-bold">${pageData.options[index].ko}</span><br><span class="text-base font-normal">${pageData.options[index].fr}</span>`;
+                        btn.classList.add('text-center', 'p-3', 'sm:p-4'); 
+                        if(index !== correctIndex) {
+                            btn.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+                            btn.classList.add('bg-gray-200', 'text-gray-700'); 
+                        }
+                    });
+                } else {
+                    if (attempts[quizIndex] >= 2) scores[quizIndex] = 0;
+                    buttonElement.classList.remove('bg-gray-100', 'hover:bg-gray-200');
+                    buttonElement.classList.add('bg-red-500', 'text-white');
+                    if (feedbackEl) {
+                        feedbackEl.textContent = 'Pas tout à fait. Réessayez !';
+                        feedbackEl.className = 'quiz-feedback-indicator text-center font-medium mt-4 h-6 text-red-500';
+                    }
+                    wrongSound?.triggerAttackRelease('A#2', '0.2s');
+                    
+                    buttonElement.disabled = true; 
+                    setTimeout(() => {
+                        buttonElement.disabled = false;
+                        buttonElement.classList.remove('bg-red-500', 'text-white');
+                        buttonElement.classList.add('bg-gray-100', 'hover:bg-gray-200');
+                        if (feedbackEl) feedbackEl.textContent = '';
+                    }, 1500);
+                }
+                
+                updateNavButtons();
+            }
+
+            // [수정] DOMContentLoaded 밖의 함수들을 리스너로 연결
+            document.getElementById('prev-btn').addEventListener('click', prevPage);
+            document.getElementById('next-btn').addEventListener('click', nextPage);
+
+            document.getElementById('retry-btn').addEventListener('click', () => {
+                 const quizIndex = currentPage;
+                 scores[quizIndex] = null;
+                 attempts[quizIndex] = 0;
+                 renderPage();
+            });
+
+            document.getElementById('passer-btn').addEventListener('click', () => {
+                 const quizIndex = currentPage;
+                 if (scores[quizIndex] === null) scores[quizIndex] = 0; 
+                 if (currentPage < pages.length - 1) {
+                      currentPage++;
+                      renderPage();
+                 }
+            });
+            
+            function renderPage() {
+                if (currentPage >= totalPages) return; 
+
+                if (audioPlayTimeout) {
+                    clearTimeout(audioPlayTimeout);
+                    audioPlayTimeout = null;
+                }
+
+                const pageData = pages[currentPage];
+                const contentEl = document.getElementById('page-content');
+                contentEl.innerHTML = '';
+                contentEl.scrollTop = 0;
+
+                if (pageData.audioFr && !pageData.audioFr.startsWith('URL_PLACEHOLDER_')) {
+                    const existingAudio = document.getElementById('french-guide-audio');
+                    if (existingAudio) {
+                        existingAudio.pause();
+                        existingAudio.remove();
+                    }
+                    
+                    audioPlayTimeout = setTimeout(() => {
+                        const audioEl = document.createElement('audio');
+                        audioEl.src = pageData.audioFr;
+                        audioEl.style.display = 'none';
+                        audioEl.id = 'french-guide-audio';
+                        contentEl.appendChild(audioEl);
+                        audioEl.play().catch(error => {
+                             console.warn(`Autoplay for ${pageData.audioFr} failed:`, error.name);
+                        });
+                    }, 1500);
+                }
+
+                switch (pageData.type) {
+                    case 'text': {
+                        if (pageData.title) {
+                            const title = document.createElement('h1');
+                            title.className = 'text-2xl sm:text-3xl font-bold text-gray-900 mb-4 sm:mb-6 text-center';
+                            title.innerText = pageData.title;
+                            contentEl.appendChild(title);
+                        }
+                        const text = document.createElement('p');
+                        text.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed text-center'; 
+                        text.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(text);
+                        break;
+                    }
+
+                    case 'text_with_vocab': {
+                        contentEl.appendChild(createSimpleVocabCard(pageData, currentPage));
+                        const explanationText = document.createElement('p');
+                        explanationText.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed text-center mt-4 sm:mt-6'; 
+                        explanationText.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(explanationText);
+                        break;
+                    }
+
+                    case 'text_then_vocab': {
+                        if (pageData.title) {
+                             const title = document.createElement('h1');
+                             title.className = 'text-2xl sm:text-3xl font-bold text-gray-900 mb-4 sm:mb-6 text-center';
+                             title.innerText = pageData.title;
+                             contentEl.appendChild(title);
+                        }
+                        const text = document.createElement('p');
+                        text.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed text-center mb-4 sm:mb-6';
+                        text.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(text);
+                        
+                        contentEl.appendChild(createVocabCard(pageData, currentPage));
+                        break;
+                    }
+
+                    case 'multi_vocab_text': {
+                        const vocabContainer = document.createElement('div');
+                        vocabContainer.className = 'flex flex-col sm:flex-row gap-4 mb-4 sm:mb-6';
+
+                        pageData.vocabs.forEach(vocabData => {
+                            const card = document.createElement('div');
+                            card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center flex-1'; 
+                            
+                            const audioArea = document.createElement('div');
+                            audioArea.className = 'cursor-pointer hover:bg-gray-100 transition duration-300 p-2 rounded-lg w-full';
+                            audioArea.onclick = () => playAudio(vocabData.audio);
+
+                            const koText = document.createElement('h2');
+                            koText.className = 'text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2 text-center';
+                            koText.innerText = vocabData.ko;
+                            audioArea.appendChild(koText);
+
+                            const frText = document.createElement('p');
+                            frText.className = 'text-base sm:text-lg text-gray-600 text-center';
+                            frText.innerText = vocabData.fr;
+                            audioArea.appendChild(frText);
+                            
+                            const icon = document.createElement('span');
+                            icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400 mt-2 mx-auto"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>';
+                            audioArea.appendChild(icon);
+                            
+                            card.appendChild(audioArea);
+                            vocabContainer.appendChild(card);
+                        });
+
+                        contentEl.appendChild(vocabContainer);
+
+                        const explanationText = document.createElement('p');
+                        explanationText.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed text-center mt-4 sm:mt-6'; 
+                        explanationText.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(explanationText);
+                        break;
+                    }
+
+                    case 'vocab': {
+                        contentEl.appendChild(createVocabCard(pageData, currentPage));
+                        break;
+                    }
+
+                    case 'quiz': {
+                        contentEl.appendChild(createQuizCard(pageData, currentPage));
+                        break;
+                    }
+                    
+                    case 'speech_quiz': {
+                        const cardWrapper = document.createElement('div');
+                        cardWrapper.className = 'flex flex-col justify-center flex-grow';
+                        cardWrapper.appendChild(createSpeechQuizCard(pageData, currentPage));
+                        contentEl.appendChild(cardWrapper);
+                        break;
+                    }
+                }
+                updateNavButtons();
+                updateProgressBar();
+            }
+            
+            function updateProgressBar() {
+                const progress = (currentPage / (totalPages - 1)) * 100;
+                document.getElementById('progress-indicator').style.width = `${progress}%`;
+            }
+            
+            // Initial render on page load
+            renderPage();
+        });
+    </script>
+
+</body>
+</html>
