@@ -67,7 +67,7 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // [CONFIG]
+        // [CONFIG] Base 44 URLs
         const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
         const CLOVA_API_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
         const GEMINI_CHAT_URL = BASE_44_ORIGIN + '/api/functions/geminiChat';
@@ -179,7 +179,6 @@
             activateUserTurn();
         }
 
-        // [수정] TTS 에러 발생 시 멈추지 않고 계속 진행하도록 수정
         async function agentSpeak(text) {
             isAgentSpeaking = true;
             statusText.textContent = "L'agent parle...";
@@ -196,8 +195,6 @@
                 });
                 
                 if (!response.ok) {
-                    // 에러 발생 시 상세 내용을 로그로 남기고, 멈추지 않고 넘어가기 위해 에러를 throw
-                    console.warn(`TTS Backend responded with status ${response.status}`);
                     throw new Error(`TTS API status: ${response.status}`);
                 }
 
@@ -209,10 +206,9 @@
                 }
             } catch (e) {
                 console.error("TTS Playback Failed (Continuing without audio):", e);
-                // TTS 실패 시 텍스트를 읽을 시간 정도 대기 후 진행 (Fallback)
+                // Fallback delay
                 await wait(Math.max(1500, text.length * 100));
             } finally {
-                // 성공하든 실패하든 항상 실행되어 다음 단계로 넘어감
                 agentAvatar.classList.remove('agent-speaking', 'opacity-100');
                 agentAvatar.classList.add('opacity-50', 'grayscale');
                 isAgentSpeaking = false;
@@ -234,11 +230,11 @@
                     audio.onended = resolve;
                     audio.play().catch(err => {
                         console.error("Audio play failed:", err);
-                        resolve(); // 재생 실패 시에도 resolve하여 멈춤 방지
+                        resolve(); 
                     });
                 } catch (e) { 
                     console.error(e); 
-                    resolve(); // 디코딩 실패 시에도 resolve
+                    resolve(); 
                 }
             });
         }
@@ -285,7 +281,6 @@
             if (hintTimeout) clearTimeout(hintTimeout);
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                // iOS 호환성을 위해 audio/webm 대신 mp4 시도 가능하나, 네이버는 webm도 잘 받음
                 mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
                 audioChunks = []; isRecording = true;
                 mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
@@ -303,7 +298,7 @@
                     stream.getTracks().forEach(t => t.stop());
                 };
                 mediaRecorder.start();
-            } catch (e) { console.error(e); alert("Erreur micro"); }
+            } catch (e) { console.error(e); alert("Erreur micro: " + e.message); }
         }
 
         function stopRecording() { if (mediaRecorder && isRecording) mediaRecorder.stop(); }
@@ -314,13 +309,10 @@
                 const sttResponse = await fetch(CLOVA_API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        audioBase64: base64Audio,
-                        languageCode: "Kor"
-                    })
+                    body: JSON.stringify({ audioBase64: base64Audio, languageCode: "Kor" })
                 });
                 
-                if (!sttResponse.ok) throw new Error("STT Error");
+                if (!sttResponse.ok) throw new Error(`STT Error: ${sttResponse.status}`);
                 
                 const sttResult = await sttResponse.json();
                 const rawResult = sttResult.raw || sttResult;
@@ -339,19 +331,20 @@
                 규칙:
                 1. 유저가 상황에 적절한 한국어를 말했다면: { "reply": "자연스러운 한국어 응답", "isCorrect": true }
                 2. 유저가 엉뚱한 말을 하거나 외국어를 썼다면: { "reply": "잘 못 알아들었어요. 다시 말씀해 주세요.", "isCorrect": false }
-                3. JSON만 반환하세요.
+                3. 오직 JSON만 반환하세요.
                 `;
 
                 const geminiResponse = await fetch(GEMINI_CHAT_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: userText, 
-                        systemInstruction: systemInstruction
-                    })
+                    body: JSON.stringify({ message: userText, systemInstruction: systemInstruction })
                 });
+                
+                if (!geminiResponse.ok) throw new Error(`Gemini Error: ${geminiResponse.status}`);
 
                 const geminiData = await geminiResponse.json();
+                if (!geminiData.text) throw new Error("Gemini response empty");
+
                 let cleanJson = geminiData.text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const aiLogic = JSON.parse(cleanJson);
 
