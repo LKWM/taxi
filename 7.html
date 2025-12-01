@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cours de Coréen - Leçon 7 : Révision</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for audio synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+             overflow: hidden;
+        }
+        /* Custom highlight class */
+        .highlight {
+            color: #16a34a; /* text-green-600 */
+            font-weight: 600;
+        }
+        /* 모바일/PC 꽉 차는 레이아웃 */
+        #app-container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #facc15; /* bg-yellow-400 */
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        /* 콘텐츠 영역 */
+        #page-content {
+            flex-grow: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            padding-bottom: 8rem;
+        }
+        /* 마이크/네비게이션 스타일 */
+        .mic-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .mic-btn.recording {
+            background-color: #ef4444;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4);
+        }
+        .mic-btn.loading {
+            background-color: #6b7280;
+            cursor: not-allowed;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .nav-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem;
+            background-color: #facc15;
+            border-top: 1px solid #eab308;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+        @media (min-width: 640px) {
+            .nav-container { padding: 1.5rem; }
+            #page-content { padding-bottom: 6rem; }
+        }
+        #next-btn:disabled {
+            background-color: #9ca3af;
+            color: #e5e7eb;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        #prev-btn:disabled {
+             opacity: 0.5;
+             cursor: not-allowed;
+        }
+        /* 퀴즈 피드백 영역 */
+        .feedback-message {
+            min-height: 2rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+        }
+        @media (min-width: 640px) {
+             .feedback-message {
+                 font-size: 1rem;
+             }
+        }
+        /* 힌트 텍스트 스타일 */
+        .hint-text {
+            color: #d97706; /* amber-600 */
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-top: 0.5rem;
+            display: block;
+            background-color: #fffbeb;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            border: 1px dashed #d97706;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen h-screen p-2 sm:p-4">
+
+    <!-- App Container -->
+    <div id="app-container">
+        <!-- Page Content -->
+        <div id="page-content" class="flex flex-col justify-center">
+            <!-- Content appears here -->
+        </div>
+
+        <!-- Navigation -->
+        <div id="navigation" class="nav-container">
+             <div class="justify-self-start">
+                 <button id="prev-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">Précédent</button>
+             </div>
+            
+             <div class="flex-grow sm:flex-grow-0 sm:w-1/2 h-2 bg-yellow-600 rounded-full overflow-hidden mx-2">
+                 <div id="progress-indicator" class="h-full bg-white transition-all duration-300"></div>
+             </div>
+            
+             <div class="justify-self-end flex gap-2">
+                 <button id="retry-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Réessayer</button>
+                 <button id="passer-btn" class="hidden bg-amber-500 text-white font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-amber-600">Passer</button>
+                 <button id="next-btn" class="bg-white text-gray-800 font-bold py-1.5 px-3 text-sm sm:py-2 sm:px-5 sm:text-base rounded-full shadow-lg transition duration-300 hover:bg-gray-200">
+                     Suivant
+                 </button>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        function playAudio(url) {
+            if (!url || url.includes('PLACEHOLDER')) {
+                console.warn('Audio URL is a placeholder or invalid:', url);
+                return;
+            }
+            try {
+                const audio = new Audio(url);
+                audio.play().catch(e => {
+                    console.error("Error playing audio:", e.name, e.message);
+                    const statusEl = document.querySelector('.speech-status-indicator:not(.hidden)');
+                    if (statusEl) {
+                        statusEl.innerText = "Désolé, l'audio n'a pas pu être chargé.";
+                        statusEl.className = 'speech-status-indicator text-center text-red-500 mt-4';
+                    }
+                });
+            } catch (e) {
+                console.error("Error creating audio element:", e);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 1. STATE AND DATA ---
+            let currentPage = 0;
+            let scores = [];
+            let attempts = {};
+            let soundsReady = false;
+            let audioPlayTimeout = null;
+
+            const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+            const CLOVA_API_FUNCTION_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+            
+            // Audio synth
+            let pageTurnSynth, correctSound, wrongSound, completionSynth;
+            if (typeof Tone !== 'undefined') {
+                pageTurnSynth = new Tone.Synth().toDestination();
+                completionSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                correctSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.2, release: 0.2 } }).toDestination();
+                wrongSound = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0.1, release: 0.2 } }).toDestination();
+            }
+
+            const initAudioSynth = async () => {
+                if (soundsReady) return;
+                try {
+                    await Tone.start();
+                    soundsReady = true;
+                    console.log('Audio context started.');
+                } catch (e) {
+                    console.error("Audio context could not be started: ", e);
+                }
+            };
+            document.body.addEventListener('click', initAudioSynth, { once: true });
+            document.body.addEventListener('touchstart', initAudioSynth, { once: true });
+            
+            // [*** 수정 ***] Leçon 7 페이지 데이터
+            const pages = [
+                // Page 1: Intro
+                { 
+                    type: 'text', 
+                    title: 'Leçon 7 : Révision', 
+                    content: 'Bienvenue dans la dernière leçon du programme &lt;Le coréen pour prendre le taxi&gt;. Dans cette leçon, on va réviser les expressions que vous avez appris.',
+                    audioFr: 'URL_PLACEHOLDER_INTRO' 
+                },
+                
+                // Page 2: Quiz "J’attrape un taxi"
+                { 
+                    type: 'speech_quiz', 
+                    fr: 'J’attrape un taxi', 
+                    ko: '택시를 잡아요',
+                    hint: '택시를 ___ .',
+                    audio: 'URL_PLACEHOLDER_Q1' 
+                },
+
+                // Page 3: Quiz "Où va-t-on?"
+                { 
+                    type: 'speech_quiz', 
+                    fr: 'Où va-t-on ?', 
+                    ko: '어디로 갈까요?',
+                    hint: '어디로 ___?',
+                    audio: 'URL_PLACEHOLDER_Q2' 
+                },
+
+                // Page 4: Quiz "Allez à la gare de Séoul, s’il vous plaît."
+                { 
+                    type: 'speech_quiz', 
+                    fr: 'Allez à la gare de Séoul, s’il vous plaît.', 
+                    ko: '서울역으로 가 주세요',
+                    hint: '서울역___ 가 ____.',
+                    audio: 'URL_PLACEHOLDER_Q3' 
+                },
+
+                // Page 5: Quiz "Combien de temps ça prend ?"
+                { 
+                    type: 'speech_quiz', 
+                    fr: 'Combien de temps ça prend ?', 
+                    ko: '얼마나 걸려요?',
+                    hint: '얼마__ __요?',
+                    audio: 'URL_PLACEHOLDER_Q4' 
+                },
+
+                // Page 6: Quiz "Baissez un peu la radio, s’il vous plaît."
+                { 
+                    type: 'speech_quiz', 
+                    fr: 'Baissez un peu la radio, s’il vous plaît.', 
+                    ko: '라디오 좀 줄여 주세요',
+                    hint: '라디오 _ 줄여 ___',
+                    audio: 'URL_PLACEHOLDER_Q5' 
+                },
+
+                // Page 7: Quiz "Je vais payer par carte." (with alternative answer)
+                { 
+                    type: 'speech_quiz', 
+                    fr: 'Je vais payer par carte.', 
+                    ko: '카드로 낼게요',
+                    accepted_answers: ['카드로 할게요'],
+                    hint: '카드로 ____',
+                    audio: 'URL_PLACEHOLDER_Q6' 
+                },
+
+                // Page 8: Finish
+                { 
+                    type: 'text', 
+                    title: 'Félicitations !', 
+                    content: 'Vous avez terminé toutes les leçons. Bravo pour votre travail acharné !', 
+                    audioFr: 'URL_PLACEHOLDER_OUTRO'
+                }
+            ];
+            
+            const totalPages = pages.length;
+            scores = Array(totalPages).fill(null); 
+            
+            // --- Naver API Integration ---
+            let mediaRecorder;
+            let audioChunks = [];
+            let isRecording = false;
+            let recordingTimeout;
+
+            async function startRecording(quizIndex) {
+                if (isRecording) return;
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    alert("Votre navigateur ne supporte pas l'enregistrement audio.");
+                    return;
+                }
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    isRecording = true;
+                    audioChunks = [];
+                    let mimeType = 'audio/webm;codecs=opus';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/webm';
+                    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+                    
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType }); 
+                    mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+                    mediaRecorder.onstart = () => {
+                        document.querySelector(`#mic-btn-${quizIndex}`)?.classList.add('recording');
+                        document.querySelector(`#speech-status-${quizIndex}`).textContent = "J'écoute...";
+                        document.querySelector(`#speech-status-${quizIndex}`).className = 'speech-status-indicator feedback-message text-center text-gray-700';
+                        
+                        // 기존 힌트가 있다면 제거 (재시도시 깔끔하게)
+                        const existingHint = document.querySelector(`#hint-${quizIndex}`);
+                        if(existingHint) existingHint.remove();
+
+                        clearTimeout(recordingTimeout);
+                        recordingTimeout = setTimeout(() => { if (isRecording) stopRecording(quizIndex); }, 10000);
+                    };
+                    mediaRecorder.onstop = () => {
+                        isRecording = false;
+                        clearTimeout(recordingTimeout);
+                        document.querySelector(`#mic-btn-${quizIndex}`)?.classList.remove('recording');
+                        document.querySelector(`#mic-btn-${quizIndex}`)?.classList.add('loading');
+                        document.querySelector(`#speech-status-${quizIndex}`).textContent = "Évaluation en cours...";
+
+                        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = () => {
+                            handlePronunciationEvaluation(quizIndex, reader.result);
+                        };
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    mediaRecorder.start();
+                } catch (err) {
+                    console.error("Error starting recording:", err);
+                    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                        alert("Impossible d'accéder au microphone. Veuillez autoriser l'accès.");
+                    } else {
+                        alert(`Erreur microphone: ${err.name}. Veuillez réessayer.`);
+                    }
+                }
+            }
+
+            function stopRecording(quizIndex) {
+                clearTimeout(recordingTimeout);
+                if (mediaRecorder && isRecording) mediaRecorder.stop();
+            }
+
+            function normalizeText(text) {
+                if (typeof text !== 'string') return '';
+                return text.trim().replace(/[.,!?'\s]/g, '');
+            }
+
+            async function handlePronunciationEvaluation(quizIndex, audioBase64) {
+                const quiz = pages[quizIndex];
+                const feedbackEl = document.querySelector(`#speech-status-${quizIndex}`);
+                const micBtn = document.querySelector(`#mic-btn-${quizIndex}`);
+                const attemptsEl = document.querySelector(`#attempts-${quizIndex}`);
+                const card = document.querySelector(`#card-${quizIndex}`); // 카드 요소 참조 (힌트 추가용)
+                
+                if (attempts[quizIndex] === undefined) attempts[quizIndex] = 0;
+                attempts[quizIndex]++;
+                const isFirstAttempt = attempts[quizIndex] === 1;
+                
+                try {
+                    const response = await fetch(CLOVA_API_FUNCTION_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            audioBase64: audioBase64,
+                            languageCode: "Kor", 
+                            referenceText: quiz.ko
+                        })
+                    });
+        
+                    if (!response.ok) {
+                        let errorDetails = "Erreur inconnue";
+                        const errorText = await response.text(); 
+                        try { const errorResult = JSON.parse(errorText); errorDetails = errorResult.error || JSON.stringify(errorResult); }
+                        catch (e) { errorDetails = errorText; }
+                        throw new Error(`Erreur du backend (${response.status}): ${errorDetails}`);
+                    }
+                    
+                    const result = await response.json(); 
+                    const transcribedText = result.text || '';
+                    const score = (result.assessment ? result.assessment.pronunciation_score : 0) || 0;
+
+                    const normalizedTranscribed = normalizeText(transcribedText);
+                    const normalizedReference = normalizeText(quiz.ko);
+                    
+                    // 정답 체크 (메인 정답 + 대체 정답 확인)
+                    let isTextMatch = (normalizedTranscribed === normalizedReference);
+                    
+                    // 대체 정답 확인 로직 (예: 카드로 할게요)
+                    if (!isTextMatch && quiz.accepted_answers) {
+                        isTextMatch = quiz.accepted_answers.some(ans => normalizeText(ans) === normalizedTranscribed);
+                    }
+
+                    const isScorePass = score >= 80;
+                    
+                    const isCorrect = isTextMatch && isScorePass; 
+    
+                    if (isCorrect) {
+                        scores[quizIndex] = 1;
+                        correctSound?.triggerAttackRelease('C5', '0.2s');
+                        if(micBtn) micBtn.disabled = true;
+                        if(feedbackEl) {
+                            feedbackEl.innerHTML = `Très bien ! "${transcribedText}"<br>(Réponse: <span class="font-bold">${quiz.ko}</span>)`;
+                            feedbackEl.className = 'speech-status-indicator feedback-message text-center text-green-600';
+                        }
+                        if(attemptsEl) attemptsEl.textContent = 'Terminé !';
+
+                        const aideBtn = document.querySelector(`#aide-btn-${quizIndex}`);
+                        if (aideBtn) aideBtn.style.display = 'none';
+
+                        // 힌트가 있다면 제거
+                        const existingHint = document.querySelector(`#hint-${quizIndex}`);
+                        if(existingHint) existingHint.remove();
+
+                    } else {
+                        if (isFirstAttempt) {
+                            scores[quizIndex] = null;
+                            wrongSound?.triggerAttackRelease('A#2', '0.2s');
+                            if(feedbackEl) {
+                                feedbackEl.innerHTML = `J'ai entendu : "${transcribedText || '...'}"<br>Essayez encore.`; 
+                                feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                            }
+                            if(attemptsEl) attemptsEl.textContent = 'Tentatives restantes : 1';
+
+                            // [*** 추가 ***] 힌트 제공 로직
+                            if (quiz.hint) {
+                                const hintDiv = document.createElement('div');
+                                hintDiv.id = `hint-${quizIndex}`;
+                                hintDiv.className = 'hint-text mt-3 text-center';
+                                hintDiv.innerText = `Indice : ${quiz.hint}`;
+                                // 버튼 위에 힌트 추가
+                                if (card) {
+                                     // micBtn의 부모의 부모... 찾기보다는 feedbackEl 뒤에 추가
+                                     feedbackEl.parentElement.appendChild(hintDiv);
+                                }
+                            }
+
+                            const speechContainer = feedbackEl.parentElement;
+                            if (speechContainer && !document.querySelector(`#aide-btn-${quizIndex}`) && !quiz.audio.includes('PLACEHOLDER')) {
+                                const aideBtn = document.createElement('button');
+                                aideBtn.id = `aide-btn-${quizIndex}`;
+                                aideBtn.className = 'w-full bg-amber-500 text-white font-semibold py-2 px-4 rounded-full shadow-md hover:bg-amber-600 transition duration-300 text-sm mt-3';
+                                aideBtn.innerHTML = 'Aide 💡 Écouter';
+                                aideBtn.onclick = () => playAudio(quiz.audio);
+                                speechContainer.appendChild(aideBtn);
+                            }
+
+                        } else {
+                            scores[quizIndex] = 0;
+                            wrongSound?.triggerAttackRelease('A#2', '0.2s');
+                            if(feedbackEl) {
+                                feedbackEl.innerHTML = `Réponse: <span class="font-bold">${quiz.ko}</span> (Votre score: ${score} / 100)`;
+                                feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                            }
+                            if(micBtn) micBtn.disabled = true;
+                            if(attemptsEl) attemptsEl.textContent = 'Tentatives épuisées.';
+
+                            const aideBtn = document.querySelector(`#aide-btn-${quizIndex}`);
+                            if (aideBtn) aideBtn.style.display = 'none';
+                        }
+                    }
+                    
+                    window.parent.postMessage({
+                        type: 'pronunciation_result',
+                        quizId: quizIndex,
+                        naverScore: score,
+                        pointsAwarded: scores[quizIndex],
+                        transcribedText: transcribedText,
+                        referenceText: quiz.ko,
+                        isCorrect: isCorrect,
+                        attempt: attempts[quizIndex],
+                        assessment: result.assessment || { pronunciation_score: score }
+                    }, '*');
+
+                } catch (error) {
+                    console.error("Erreur lors de l'évaluation:", error); 
+                    if(feedbackEl) {
+                        feedbackEl.textContent = `Erreur de connexion. Veuillez réessayer.`;
+                        feedbackEl.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                    }
+                    if (attempts[quizIndex] > 0) attempts[quizIndex]--; 
+                } finally {
+                    if(micBtn) micBtn.classList.remove('loading');
+                    updateNavButtons(); 
+                }
+            }
+
+            function createSimpleVocabCard(data, quizIndex) {
+                // (이전 코드와 동일, 이번 레슨에서는 사용되지 않지만 호환성을 위해 유지)
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center mb-4 sm:mb-6';
+                return card;
+            }
+
+            function createSpeechQuizCard(data, quizIndex) {
+                const card = document.createElement('div');
+                card.id = `card-${quizIndex}`; // 힌트 추가를 위해 ID 부여
+                card.className = 'bg-white rounded-2xl shadow-xl w-full p-4 sm:p-6 flex flex-col items-center justify-center flex-grow';
+
+                const frText = document.createElement('p');
+                frText.className = 'text-2xl sm:text-3xl font-bold text-gray-900 mb-4 sm:mb-6 text-center';
+                frText.innerText = data.fr;
+                card.appendChild(frText);
+
+                card.appendChild(createSpeechSection(quizIndex, data, 'Parlez')); 
+                return card;
+            }
+
+            function createSpeechSection(quizIndex, pageData, buttonText = 'Répétez') {
+                const correctKoreanText = pageData.ko;
+                
+                const speechContainer = document.createElement('div');
+                speechContainer.className = 'w-full flex flex-col items-center mt-4';
+                
+                const repeatBtn = document.createElement('button');
+                repeatBtn.id = `mic-btn-${quizIndex}`;
+                // [수정] disabled 상태일 때의 스타일(회색 배경, 텍스트 색상 변경, 그림자 제거 등)을 추가했습니다.
+                repeatBtn.className = 'w-full mic-btn bg-sky-500 text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-full shadow-md hover:bg-sky-600 transition duration-300 flex items-center justify-center gap-2 text-sm sm:text-base disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-gray-300';
+                repeatBtn.innerHTML = `${buttonText} <span><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></span>`;
+                
+                speechContainer.appendChild(repeatBtn);
+
+                const speechStatus = document.createElement('p');
+                speechStatus.id = `speech-status-${quizIndex}`;
+                speechStatus.className = 'speech-status-indicator feedback-message text-center h-6 text-sm sm:text-base';
+                speechContainer.appendChild(speechStatus);
+                
+                const attemptsEl = document.createElement('div');
+                attemptsEl.id = `attempts-${quizIndex}`;
+                attemptsEl.className = 'text-xs sm:text-sm text-slate-400 mt-1';
+                attemptsEl.textContent = 'Tentatives restantes : 2';
+                speechContainer.appendChild(attemptsEl);
+
+                const currentAttempts = attempts[quizIndex] || 0;
+                const currentScore = scores[quizIndex];
+                
+                attemptsEl.textContent = `Tentatives restantes : ${Math.max(0, 2 - currentAttempts)}`;
+
+                if (currentScore === 1) {
+                    repeatBtn.disabled = true;
+                    speechStatus.innerHTML = `Très bien ! (Réponse: <span class="font-bold">${correctKoreanText}</span>)`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-green-600';
+                    attemptsEl.textContent = 'Terminé !';
+                } else if (currentScore === 0) {
+                    repeatBtn.disabled = true;
+                    speechStatus.innerHTML = `Réponse: <span class="font-bold">${correctKoreanText}</span>`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                    attemptsEl.textContent = 'Tentatives épuisées.';
+                } else if (currentAttempts >= 2) {
+                    repeatBtn.disabled = true;
+                    speechStatus.innerHTML = `Réponse: <span class="font-bold">${correctKoreanText}</span>`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-red-500';
+                    attemptsEl.textContent = 'Tentatives épuisées.';
+                    if(currentScore === null) scores[quizIndex] = 0;
+                } else if (currentAttempts === 1) {
+                    speechStatus.textContent = `Essayez encore.`;
+                    speechStatus.className = 'speech-status-indicator feedback-message text-center text-red-500';
+
+                    // 재진입 시 힌트 복원 로직
+                    if (pageData.hint) {
+                        const hintDiv = document.createElement('div');
+                        hintDiv.id = `hint-${quizIndex}`;
+                        hintDiv.className = 'hint-text mt-3 text-center';
+                        hintDiv.innerText = `Indice : ${pageData.hint}`;
+                        speechContainer.appendChild(hintDiv);
+                    }
+
+                    if (speechContainer && !document.querySelector(`#aide-btn-${quizIndex}`) && !pageData.audio.includes('PLACEHOLDER')) {
+                        const aideBtn = document.createElement('button');
+                        aideBtn.id = `aide-btn-${quizIndex}`;
+                        aideBtn.className = 'w-full bg-amber-500 text-white font-semibold py-2 px-4 rounded-full shadow-md hover:bg-amber-600 transition duration-300 text-sm mt-3';
+                        aideBtn.innerHTML = 'Aide 💡 Écouter';
+                        aideBtn.onclick = () => playAudio(pageData.audio);
+                        speechContainer.appendChild(aideBtn);
+                    }
+                }
+
+                repeatBtn.onclick = () => {
+                    const currentAttemptsOnClick = attempts[quizIndex] || 0;
+                    if (repeatBtn.disabled || repeatBtn.classList.contains('loading')) return;
+                    
+                    if (currentAttemptsOnClick >= 2) {
+                        return; 
+                    }
+                    
+                    if (isRecording) stopRecording(quizIndex);
+                    else {
+                        initAudioSynth(); 
+                        startRecording(quizIndex);
+                    }
+                };
+
+                return speechContainer;
+            }
+
+            window.nextPage = function() {
+                if (document.getElementById('next-btn').disabled) return;
+                if (currentPage < pages.length - 1) {
+                    currentPage++;
+                    renderPage();
+                    playPageTurnSound();
+                }
+                
+                if (currentPage === pages.length - 1) {
+                     window.parent.postMessage({ type: 'lesson_complete' }, '*');
+                }
+            }
+
+            window.prevPage = function() {
+                if (document.getElementById('prev-btn').disabled) return;
+                if (currentPage > 0) {
+                    currentPage--;
+                    renderPage();
+                    playPageTurnSound();
+                }
+            }
+
+            function updateNavButtons() {
+                const prevBtn = document.getElementById('prev-btn');
+                const nextBtn = document.getElementById('next-btn');
+                const retryBtn = document.getElementById('retry-btn');
+                const passerBtn = document.getElementById('passer-btn');
+
+                prevBtn.disabled = (currentPage === 0);
+                
+                const isLastPage = currentPage === pages.length - 1;
+                nextBtn.style.visibility = isLastPage ? 'hidden' : 'visible';
+                
+                passerBtn.classList.add('hidden');
+                retryBtn.classList.add('hidden');
+
+                const pageData = pages[currentPage];
+                const quizIndex = currentPage;
+                
+                if (pageData.type === 'speech_quiz') {
+                    nextBtn.disabled = false;
+                    // 점수가 0점(실패)인 상태로 시도가 끝났으면 넘어갈 수 있게 함
+                    if ((attempts[quizIndex] || 0) >= 2 && scores[quizIndex] === 0) {
+                        passerBtn.classList.remove('hidden');
+                    }
+                }
+                else {
+                    nextBtn.disabled = isLastPage;
+                }
+            }
+
+            function playPageTurnSound() {
+                const isLastPage = currentPage === pages.length - 1;
+                if (isLastPage && completionSynth) {
+                    completionSynth.triggerAttackRelease(["C5", "E5", "G5"], "4n", Tone.now());
+                } else if (pageTurnSynth) {
+                    pageTurnSynth.triggerAttackRelease("C5", "8n", Tone.now());
+                }
+            }
+
+            function highlightText(text) {
+                return text.replace(/<([^>]+)>/g, '<span class="highlight">$1</span>');
+            }
+
+            // [수정] DOMContentLoaded 밖의 함수들을 리스너로 연결
+            document.getElementById('prev-btn').addEventListener('click', prevPage);
+            document.getElementById('next-btn').addEventListener('click', nextPage);
+
+            document.getElementById('retry-btn').addEventListener('click', () => {
+                 const quizIndex = currentPage;
+                 scores[quizIndex] = null;
+                 attempts[quizIndex] = 0;
+                 renderPage();
+            });
+
+            document.getElementById('passer-btn').addEventListener('click', () => {
+                 const quizIndex = currentPage;
+                 if (scores[quizIndex] === null) scores[quizIndex] = 0; 
+                 if (currentPage < pages.length - 1) {
+                      currentPage++;
+                      renderPage();
+                 }
+            });
+            
+            function renderPage() {
+                if (currentPage >= totalPages) return; 
+
+                if (audioPlayTimeout) {
+                    clearTimeout(audioPlayTimeout);
+                    audioPlayTimeout = null;
+                }
+
+                const pageData = pages[currentPage];
+                const contentEl = document.getElementById('page-content');
+                contentEl.innerHTML = '';
+                contentEl.scrollTop = 0;
+
+                if (pageData.audioFr && !pageData.audioFr.includes('PLACEHOLDER')) {
+                    const existingAudio = document.getElementById('french-guide-audio');
+                    if (existingAudio) {
+                        existingAudio.pause();
+                        existingAudio.remove();
+                    }
+                    
+                    audioPlayTimeout = setTimeout(() => {
+                        const audioEl = document.createElement('audio');
+                        audioEl.src = pageData.audioFr;
+                        audioEl.style.display = 'none';
+                        audioEl.id = 'french-guide-audio';
+                        contentEl.appendChild(audioEl);
+                        audioEl.play().catch(error => {
+                             console.warn(`Autoplay for ${pageData.audioFr} failed:`, error.name);
+                        });
+                    }, 1500);
+                }
+
+                switch (pageData.type) {
+                    case 'text': {
+                        if (pageData.title) {
+                            const title = document.createElement('h1');
+                            title.className = 'text-2xl sm:text-3xl font-bold text-gray-900 mb-4 sm:mb-6 text-center';
+                            title.innerText = pageData.title;
+                            contentEl.appendChild(title);
+                        }
+                        const text = document.createElement('p');
+                        text.className = 'text-lg sm:text-xl text-gray-800 leading-relaxed text-center'; 
+                        text.innerHTML = highlightText(pageData.content);
+                        contentEl.appendChild(text);
+                        break;
+                    }
+                    case 'speech_quiz': {
+                        const cardWrapper = document.createElement('div');
+                        cardWrapper.className = 'flex flex-col justify-center flex-grow';
+                        cardWrapper.appendChild(createSpeechQuizCard(pageData, currentPage));
+                        contentEl.appendChild(cardWrapper);
+                        break;
+                    }
+                }
+                updateNavButtons();
+                updateProgressBar();
+            }
+            
+            function updateProgressBar() {
+                const progress = (currentPage / (totalPages - 1)) * 100;
+                document.getElementById('progress-indicator').style.width = `${progress}%`;
+            }
+            
+            // Initial render on page load
+            renderPage();
+        });
+    </script>
+
+</body>
+</html>
