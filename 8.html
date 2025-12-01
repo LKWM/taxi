@@ -156,9 +156,6 @@
         }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; }}
 
-        /* Pause Overlay */
-        /* Utility classes used in HTML */
-
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-0 sm:p-4">
@@ -212,7 +209,7 @@
             agent11: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492613/Agent_11_loqkrh.mp3"
         };
 
-        // Scenario Data with Updated Scoring Logic & Representative Answers
+        // Scenario Data
         const SCENARIO = [
             {
                 id: 1,
@@ -349,7 +346,7 @@
         // --- State Variables ---
         let currentTurnIndex = 0;
         let currentScore = 0;
-        let turnResults = []; // Store score for each turn to identify reviews
+        let turnResults = []; 
         let isRecording = false;
         let isPaused = false;
         let mediaRecorder = null;
@@ -358,7 +355,9 @@
         let hintTimer = null;
         let recordingTimer = null;
         let hintUsed = false;
-        let audioPlayer = null;
+        
+        // Single Audio Player Instance for Performance
+        const globalAudio = new Audio();
         let correctSound, wrongSound, dingSound;
 
         // --- Initialization ---
@@ -366,6 +365,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             renderCover();
             initTone();
+            preloadAllAudio(); // Preload sounds
         });
 
         async function initTone() {
@@ -376,6 +376,57 @@
 
         async function startAudioContext() {
             await Tone.start();
+        }
+
+        // --- Audio Preloading & Playback ---
+        
+        function preloadAllAudio() {
+            // Preload all audio assets to avoid lag during conversation
+            Object.values(AUDIO).forEach(url => {
+                const audio = new Audio();
+                audio.src = url;
+                audio.preload = 'auto';
+            });
+            console.log("Audio assets preloading...");
+        }
+
+        function playAudio(url) {
+            return new Promise((resolve) => {
+                // Reuse global player to maintain user interaction context better
+                globalAudio.pause();
+                globalAudio.src = url;
+                globalAudio.currentTime = 0;
+                
+                // Safety: Resolve if error occurs or ended
+                const onEnd = () => {
+                    cleanup();
+                    resolve();
+                };
+                
+                const onError = (e) => {
+                    console.error("Audio Play Error:", e);
+                    cleanup();
+                    resolve();
+                };
+
+                const cleanup = () => {
+                    globalAudio.removeEventListener('ended', onEnd);
+                    globalAudio.removeEventListener('error', onError);
+                };
+
+                globalAudio.addEventListener('ended', onEnd);
+                globalAudio.addEventListener('error', onError);
+
+                // Try to play
+                const playPromise = globalAudio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.warn("Autoplay prevented or network error:", error);
+                        cleanup();
+                        resolve(); // Resolve immediately if blocked
+                    });
+                }
+            });
         }
 
         // --- Views Rendering ---
@@ -416,7 +467,6 @@
         }
 
         function finishLesson() {
-            // Send postMessage before rendering result
             window.parent.postMessage({ type: 'lesson_complete' }, '*');
             renderResult();
         }
@@ -439,13 +489,10 @@
                 title = "Bon travail !";
             }
 
-            // Build Review List
             let reviewListHTML = "";
             let reviewItems = [];
             
             SCENARIO.forEach((turn, index) => {
-                // Check if score for this turn was less than 20
-                // turnResults index matches SCENARIO index
                 const score = turnResults[index] || 0;
                 if (score < 20) {
                     reviewItems.push(`<li class="mb-2 text-lg text-gray-800 border-b border-gray-100 pb-1 last:border-0">${turn.representative}</li>`);
@@ -491,7 +538,7 @@
         function startScenario() {
             currentTurnIndex = 0;
             currentScore = 0;
-            turnResults = []; // Reset results
+            turnResults = []; 
             document.getElementById('score-display').innerText = "0";
             document.getElementById('app-header').classList.remove('hidden');
             
@@ -557,11 +604,9 @@
 
         async function playTurn() {
             if (currentTurnIndex >= SCENARIO.length) {
-                // End of scenario
                 const container = document.getElementById('conversation-scroll');
                 const exitDiv = document.createElement('div');
                 exitDiv.className = "w-full flex justify-center py-6";
-                // Updated Button to call finishLesson()
                 exitDiv.innerHTML = `
                     <button onclick="finishLesson()" class="bg-yellow-500 text-white font-bold text-xl py-4 px-8 rounded-full shadow-lg hover:scale-105 transition transform border-4 border-white animate-bounce">
                         🚖 Descendre du taxi
@@ -592,7 +637,7 @@
                 micBtn.className = "mic-btn bg-amber-500 text-white w-20 h-20 rounded-full shadow-xl flex items-center justify-center mb-1 agent-speaking";
                 micBtn.onclick = null;
             }
-            if (micIcon) micIcon.innerText = "👂"; // User listens
+            if (micIcon) micIcon.innerText = "👂"; 
             if (micLabel) micLabel.innerText = "Écoutez...";
             if (timerBar) timerBar.classList.add('opacity-0');
 
@@ -615,10 +660,9 @@
                 micBtn.className = "mic-btn bg-blue-500 text-white w-20 h-20 rounded-full shadow-xl flex items-center justify-center mb-1 listening-mode hover:bg-blue-600 cursor-pointer";
                 micBtn.onclick = toggleRecording;
             }
-            if (micIcon) micIcon.innerText = "👄"; // User speaks
+            if (micIcon) micIcon.innerText = "👄"; 
             if (micLabel) micLabel.innerText = "À vous !";
             
-            // 3. Start Hint Timer
             startHintTimer(turn);
         }
 
@@ -662,7 +706,7 @@
             
             if (isPaused) {
                 if (overlay) overlay.classList.remove('hidden');
-                if (audioPlayer) audioPlayer.pause();
+                if (globalAudio) globalAudio.pause(); // Updated to use globalAudio
                 clearTimeout(hintTimer);
                 clearTimeout(recordingTimer);
                 
@@ -692,30 +736,11 @@
                 if (micBtn && micBtn.classList.contains('listening-mode')) {
                     startHintTimer(turn);
                 } else {
-                    if (audioPlayer && !audioPlayer.ended) {
-                        audioPlayer.play().catch(e => console.log("Resume failed", e));
+                    if (globalAudio && globalAudio.paused && globalAudio.currentTime > 0) {
+                         globalAudio.play().catch(e => console.log("Resume failed", e));
                     }
                 }
             }
-        }
-
-        function playAudio(url) {
-            return new Promise((resolve) => {
-                if (audioPlayer) {
-                    audioPlayer.pause();
-                    audioPlayer = null;
-                }
-                audioPlayer = new Audio(url);
-                audioPlayer.onended = resolve;
-                audioPlayer.onerror = (e) => {
-                    console.error("Audio Load Error", e);
-                    resolve();
-                };
-                audioPlayer.play().catch(e => {
-                    console.warn("Autoplay blocked", e);
-                    resolve();
-                });
-            });
         }
 
         async function toggleRecording() {
@@ -877,7 +902,6 @@
                 points = points / 2; // 20 -> 10, 10 -> 5
             }
 
-            // Store result for this turn
             turnResults[currentTurnIndex] = points;
 
             if (points > 0) {
@@ -885,7 +909,6 @@
                 document.getElementById('score-display').innerText = currentScore;
                 correctSound.triggerAttackRelease("C5", "0.1");
                 
-                // Visual feedback for points
                 const ptsBubble = document.createElement('div');
                 ptsBubble.className = "text-center text-sm font-bold text-green-600 animate-bounce mt-1";
                 ptsBubble.innerText = `+${points}`;
@@ -895,16 +918,17 @@
                 wrongSound.triggerAttackRelease("G2", "0.2");
             }
 
-            // Next Turn
-            await new Promise(r => setTimeout(r, 1000)); 
+            // Next Turn - Reduced delay to 500ms to allow audio context transition
+            await new Promise(r => setTimeout(r, 500)); 
 
             if (turn.react) {
                 appendAgentBubble(turn.react.text);
                 await playAudio(turn.react.audio);
             }
-
+            
+            // Immediately start next turn after reaction
             currentTurnIndex++;
-            setTimeout(playTurn, 1000); 
+            playTurn(); 
         }
 
     </script>
