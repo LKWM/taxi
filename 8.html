@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leçon supplémentaire : Parlez en coréen !</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for UI sounds -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Base styles */
+        body {
+            font-family: 'Inter', 'Nanum Gothic', sans-serif;
+            overflow: hidden;
+            background-color: #f3f4f6;
+        }
+
+        /* App Container */
+        #app-container {
+            width: 100%;
+            max-width: 1000px;
+            background-color: #facc15; /* bg-yellow-400 */
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-height: 100vh;
+            position: relative;
+        }
+
+        @media (min-width: 640px) {
+            #app-container {
+                height: 90vh;
+                margin: 2rem auto;
+            }
+        }
+
+        /* Scrollable Content Area */
+        #page-content {
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Manage overflow in inner containers */
+        }
+
+        /* Conversation Scroll Area */
+        #conversation-scroll {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            scroll-behavior: smooth;
+        }
+
+        /* Mic Button Styles */
+        .mic-btn {
+            transition: all 0.2s ease-in-out;
+            transform: scale(1);
+            font-size: 2rem;
+        }
+        .mic-btn:active {
+            transform: scale(0.95);
+        }
+        .mic-btn.recording {
+            background-color: #ef4444; /* red-500 */
+            animation: pulse-red 1.5s infinite;
+        }
+        .mic-btn.listening-mode {
+            background-color: #3b82f6; /* blue-500 */
+        }
+        .mic-btn.agent-speaking {
+            background-color: #f59e0b; /* amber-500 */
+            cursor: default;
+        }
+        .mic-btn.disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        /* Chat Bubbles */
+        .bubble {
+            padding: 1rem 1.5rem;
+            border-radius: 1.5rem;
+            max-width: 85%;
+            font-size: 1.1rem;
+            line-height: 1.5;
+            position: relative;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            word-break: keep-all;
+        }
+        .bubble-agent {
+            background-color: white;
+            color: #1f2937;
+            align-self: flex-start;
+            border-bottom-left-radius: 0.2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .bubble-user {
+            background-color: #2563eb; /* blue-600 */
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0.2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        @keyframes popIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.9); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        /* Hint Button */
+        .hint-btn {
+            background-color: rgba(255, 255, 255, 0.5);
+            border: 2px solid white;
+            color: #78350f; /* amber-900 */
+            font-weight: bold;
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            align-self: center;
+            margin-top: 0.5rem;
+        }
+        .hint-btn:hover {
+            background-color: white;
+        }
+        .hint-box {
+            background-color: #fffbeb;
+            border: 1px dashed #d97706;
+            color: #d97706;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            font-weight: 600;
+            animation: fadeIn 0.5s;
+            align-self: center;
+            max-width: 90%;
+            margin-bottom: 0.5rem;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; }}
+
+        /* Pause Overlay */
+        /* Utility classes used in HTML */
+
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-0 sm:p-4">
+
+    <!-- App Container -->
+    <div id="app-container">
+        
+        <!-- Header (Score) -->
+        <div id="app-header" class="hidden absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-10 pointer-events-none">
+            <div class="text-yellow-900 font-bold opacity-0">.</div> <!-- Spacer -->
+            <div class="bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-lg border-2 border-yellow-500">
+                <span class="text-yellow-700 font-bold">Score: </span>
+                <span id="score-display" class="text-2xl font-extrabold text-yellow-600">0</span>
+            </div>
+        </div>
+
+        <!-- Main Content View -->
+        <div id="page-content" class="w-full h-full bg-yellow-400">
+            <!-- Dynamic Content Injected Here -->
+        </div>
+
+        <!-- Pause Overlay -->
+        <div id="pause-overlay" class="hidden absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-white">
+            <div class="text-6xl mb-4">⏸️</div>
+            <h2 class="text-3xl font-bold mb-8">Pause</h2>
+            <button onclick="togglePause()" class="bg-yellow-500 text-white font-bold text-xl py-3 px-8 rounded-full shadow-lg hover:bg-yellow-600 transition transform hover:scale-105">
+                Reprendre
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Configuration & Data ---
+
+        const BASE_44_ORIGIN = "https://coreeno.base44.app"; 
+        const CLOVA_API_FUNCTION_URL = BASE_44_ORIGIN + '/api/functions/naverClovaSpeech';
+
+        // Audio Assets
+        const AUDIO = {
+            agent1: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492605/Agent_1_jcx0ry.mp3",
+            agent2: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492605/Agent_2_itnhi2.mp3",
+            agent3: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492605/Agent_3_i87ji0.mp3",
+            agent4: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492607/Agent_4_y4whcf.mp3",
+            agent5: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492607/Agent_5_swao7q.mp3",
+            agent6: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492608/Agent_6_gnojpv.mp3",
+            agent7: "https://res.cloudinary.com/de76i94ia/video/upload/v1764591505/Agent_7_xtb65a.mp3", 
+            agent8: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492610/Agent_8_bjrgwz.mp3",
+            agent9: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492611/Agent_9_psbagd.mp3",
+            agent10: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492612/Agent_10_j2dyoq.mp3",
+            agent11: "https://res.cloudinary.com/de76i94ia/video/upload/v1764492613/Agent_11_loqkrh.mp3"
+        };
+
+        // Scenario Data with Updated Scoring Logic & Representative Answers
+        const SCENARIO = [
+            {
+                id: 1,
+                emoji: "🚕",
+                agentText: "안녕하세요, 어서 오세요.",
+                agentAudio: AUDIO.agent1,
+                hintFr: 'Dites "안녕하세요" au chauffeur',
+                representative: "네, 안녕하세요.",
+                answers: [
+                    { text: "안녕하세요", type: "full" },
+                    { text: "네 안녕하세요", type: "full" },
+                    { text: "네", type: "partial" },
+                    { text: "어서오세요", type: "exception" }
+                ],
+                react: null 
+            },
+            {
+                id: 2,
+                emoji: "🚕",
+                agentText: "어디로 갈까요?",
+                agentAudio: AUDIO.agent2,
+                hintFr: 'Demandez d’aller à la gare de Séoul! "서울역으로..."',
+                representative: "서울역으로 가 주세요",
+                answers: [
+                    { text: "서울역으로 가 주세요", type: "full" },
+                    { text: "서울역", type: "partial" },
+                    { text: "로 가 주세요", type: "partial" }
+                ],
+                react: { text: "네, 출발하겠습니다.", audio: AUDIO.agent3 }
+            },
+            {
+                id: 3,
+                emoji: "⏱️",
+                agentText: "",
+                agentAudio: null,
+                hintFr: 'Demandez si l’on peut arriver à 16h. "네 시까지..."',
+                representative: "네 시까지 도착할 수 있어요?",
+                answers: [
+                    { text: "네 시까지 도착할 수 있어요", type: "full" },
+                    { text: "4시까지 도착할 수 있어요", type: "full" },
+                    { text: "네 시", type: "partial" },
+                    { text: "4시", type: "partial" },
+                    { text: "까지 도착할 수 있어요", type: "partial" },
+                    { text: "얼마나 걸려요", type: "partial" },
+                    { text: "오래 걸려요", type: "partial" }
+                ],
+                react: { text: "네 시까지 도착할 수 있습니다.", audio: AUDIO.agent4 }
+            },
+            {
+                id: 4,
+                emoji: "🥶",
+                agentText: "",
+                agentAudio: null,
+                hintFr: 'Il fait trop froid ! Demendez "에어컨 좀 ..."',
+                representative: "에어컨 좀 줄여 주세요",
+                answers: [
+                    { text: "에어컨 좀 꺼 주세요", type: "full" },
+                    { text: "에어컨 좀 줄여 주세요", type: "full" },
+                    { text: "에어컨", type: "partial" },
+                    { text: "추워", type: "partial" }
+                ],
+                react: { text: "에어컨을 꺼 드리겠습니다.", audio: AUDIO.agent5 }
+            },
+            {
+                id: 5,
+                emoji: "📻🔊",
+                agentText: "",
+                agentAudio: null,
+                hintFr: 'C’est trop bruyant! Demendez "라디오 좀 ..."',
+                representative: "라디오 좀 꺼 주세요",
+                answers: [
+                    { text: "라디오 좀 꺼 주세요", type: "full" },
+                    { text: "라디오 좀 줄여 주세요", type: "full" },
+                    { text: "라디오", type: "partial" }
+                ],
+                react: { text: "라디오를 끄겠습니다.", audio: AUDIO.agent6 }
+            },
+            {
+                id: 6,
+                emoji: "🚕",
+                agentText: "도착했습니다. 서울역입니다.", 
+                agentAudio: AUDIO.agent7, 
+                hintFr: 'Demandez le prix au chauffeur "얼마예요?"',
+                representative: "얼마예요?",
+                answers: [
+                    { text: "얼마예요", type: "full" }
+                ],
+                react: { text: "7900원입니다.", audio: AUDIO.agent8 }
+            },
+            {
+                id: 7,
+                emoji: "🚕",
+                agentText: "계산은 어떻게 하시겠어요?",
+                agentAudio: AUDIO.agent9,
+                hintFr: 'Comment vous voulez payer? "...(으)로 낼게요"',
+                representative: "카드/현금/티머니로 낼게요.",
+                answers: [
+                    { text: "카드로 낼게요", type: "full" },
+                    { text: "카드로 할게요", type: "full" },
+                    { text: "티머니 결제 돼요", type: "full" },
+                    { text: "티머니로 결제할 수 있어요", type: "full" },
+                    { text: "카드로 결제 돼요", type: "full" },
+                    { text: "카드로 할 수 있어요", type: "full" },
+                    { text: "현금으로 낼게요", type: "full" },
+                    { text: "현금으로 할게요", type: "full" },
+                    { text: "현금으로 할 수 있어요", type: "full" },
+                    { text: "현금으로 낼 수 있어요", type: "full" },
+                    { text: "현금으로 결제할 수 있어요", type: "full" },
+                    { text: "카드", type: "partial" },
+                    { text: "티머니", type: "partial" },
+                    { text: "현금", type: "partial" }
+                ],
+                react: { text: "네, 결제하겠습니다.", audio: AUDIO.agent10 }
+            },
+            {
+                id: 8,
+                emoji: "🚕",
+                agentText: "감사합니다, 안녕히 가세요.",
+                agentAudio: AUDIO.agent11,
+                hintFr: 'Dire au revoir au chauffeur. "감사합니다, 안녕히 가세요"',
+                representative: "감사합니다, 안녕히 가세요.",
+                answers: [
+                    { text: "감사합니다", type: "full" },
+                    { text: "안녕히 가세요", type: "full" },
+                    { text: "감사합니다 안녕히 가세요", type: "full" },
+                    { text: "고맙습니다", type: "partial" },
+                    { text: "감사해요", type: "partial" },
+                    { text: "고마워요", type: "partial" }
+                ],
+                react: null
+            }
+        ];
+
+        // --- State Variables ---
+        let currentTurnIndex = 0;
+        let currentScore = 0;
+        let turnResults = []; // Store score for each turn to identify reviews
+        let isRecording = false;
+        let isPaused = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        
+        let hintTimer = null;
+        let recordingTimer = null;
+        let hintUsed = false;
+        let audioPlayer = null;
+        let correctSound, wrongSound, dingSound;
+
+        // --- Initialization ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCover();
+            initTone();
+        });
+
+        async function initTone() {
+            correctSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.5 } }).toDestination();
+            wrongSound = new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.05, decay: 0.2, sustain: 0, release: 0.2 } }).toDestination();
+            dingSound = new Tone.PolySynth(Tone.Synth).toDestination();
+        }
+
+        async function startAudioContext() {
+            await Tone.start();
+        }
+
+        // --- Views Rendering ---
+
+        function renderCover() {
+            const container = document.getElementById('page-content');
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full p-6 text-center">
+                    <h1 class="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-2">Leçon supplémentaire</h1>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-yellow-800 mb-8">Parlez en coréen !</h2>
+                    <p class="text-lg text-gray-800 mb-10">Essayez de parler avec le chauffeur de taxi en coréen.</p>
+                    <button onclick="renderDescription()" class="bg-white text-yellow-600 font-bold text-xl py-4 px-10 rounded-full shadow-lg hover:bg-yellow-50 hover:scale-105 transition transform">
+                        Suivant
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderDescription() {
+            startAudioContext();
+            const container = document.getElementById('page-content');
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full p-6 text-center max-w-2xl mx-auto">
+                    <div class="bg-white rounded-2xl shadow-xl p-8 w-full">
+                        <div class="text-6xl mb-6">🚕</div>
+                        <h3 class="text-2xl font-bold text-gray-800 mb-6">Mission</h3>
+                        <p class="text-lg text-gray-700 leading-relaxed mb-8">
+                            Vous devez arriver à la <strong>gare de Séoul (서울역)</strong> avant <strong>16h00</strong>.<br><br>
+                            Montez dans le taxi, indiquez votre destination et posez des questions.<br>
+                            Réagissez aux emojis affichés à l'écran pour gagner des points supplémentaires !
+                        </p>
+                        <button onclick="startScenario()" class="bg-yellow-500 text-white font-bold text-xl py-3 px-10 rounded-full shadow-lg hover:bg-yellow-600 transition transform">
+                            Commencer
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function finishLesson() {
+            // Send postMessage before rendering result
+            window.parent.postMessage({ type: 'lesson_complete' }, '*');
+            renderResult();
+        }
+
+        function renderResult() {
+            document.getElementById('app-header').classList.add('hidden');
+            const container = document.getElementById('page-content');
+            
+            let emoji = "";
+            let title = "Terminé !";
+            
+            if (currentScore >= 130) {
+                emoji = "🏆";
+                title = "Félicitations !";
+            } else if (currentScore >= 70) {
+                emoji = "👍";
+                title = "Bien joué !";
+            } else {
+                emoji = "💪";
+                title = "Bon travail !";
+            }
+
+            // Build Review List
+            let reviewListHTML = "";
+            let reviewItems = [];
+            
+            SCENARIO.forEach((turn, index) => {
+                // Check if score for this turn was less than 20
+                // turnResults index matches SCENARIO index
+                const score = turnResults[index] || 0;
+                if (score < 20) {
+                    reviewItems.push(`<li class="mb-2 text-lg text-gray-800 border-b border-gray-100 pb-1 last:border-0">${turn.representative}</li>`);
+                }
+            });
+
+            if (reviewItems.length > 0) {
+                reviewListHTML = `
+                    <div class="bg-yellow-50 rounded-xl p-4 mt-6 text-left w-full">
+                        <h4 class="font-bold text-yellow-700 mb-3 text-lg">Phrases à réviser :</h4>
+                        <ul class="list-disc pl-5 space-y-1">
+                            ${reviewItems.join('')}
+                        </ul>
+                    </div>
+                `;
+            } else {
+                reviewListHTML = `
+                    <div class="bg-green-50 rounded-xl p-4 mt-6 w-full">
+                        <p class="text-green-700 font-bold text-lg">Parfait ! Aucune erreur.</p>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full p-6 text-center overflow-y-auto">
+                    <div class="bg-white rounded-3xl shadow-xl p-8 w-full max-w-lg transform transition-all animate-bounce-in my-auto">
+                        <div class="text-6xl mb-4">${emoji}</div>
+                        <h2 class="text-3xl font-extrabold text-gray-900 mb-2">${title}</h2>
+                        <div class="text-yellow-500 text-5xl font-black mb-2">${currentScore} <span class="text-2xl text-gray-400">pts</span></div>
+                        
+                        ${reviewListHTML}
+                    </div>
+                </div>
+            `;
+            
+            if (currentScore >= 70) {
+                dingSound.triggerAttackRelease(["C4", "E4", "G4", "C5"], "4n");
+            }
+        }
+
+        // --- Core Scenario Logic ---
+
+        function startScenario() {
+            currentTurnIndex = 0;
+            currentScore = 0;
+            turnResults = []; // Reset results
+            document.getElementById('score-display').innerText = "0";
+            document.getElementById('app-header').classList.remove('hidden');
+            
+            const container = document.getElementById('page-content');
+            container.innerHTML = `
+                <div class="flex flex-col h-full relative">
+                    <!-- Top: Status & Emoji -->
+                    <div class="flex-none pt-20 pb-4 text-center">
+                        <div id="emoji-display" class="text-7xl animate-pulse filter drop-shadow-md">🚕</div>
+                    </div>
+
+                    <!-- Middle: Conversation Scroll Area -->
+                    <div id="conversation-scroll">
+                        <!-- Bubbles will be appended here -->
+                    </div>
+
+                    <!-- Bottom: Controls -->
+                    <div class="flex-none p-4 bg-white/50 backdrop-blur-sm border-t border-yellow-500/30 flex items-center justify-center gap-4 relative">
+                        <!-- Progress Bar for recording (Absolute top) -->
+                        <div id="timer-bar" class="absolute top-0 left-0 right-0 h-1 bg-gray-300 overflow-hidden opacity-0">
+                            <div id="timer-progress" class="h-full bg-blue-500 w-0"></div>
+                        </div>
+
+                        <!-- Mic Button -->
+                        <div class="flex flex-col items-center flex-grow relative">
+                             <button id="mic-btn" class="mic-btn bg-gray-400 text-white w-20 h-20 rounded-full shadow-xl flex items-center justify-center mb-1 disabled transition-colors duration-300">
+                                <span id="mic-icon">👂</span>
+                            </button>
+                            <p id="mic-label" class="text-sm font-semibold text-gray-700">Attendez...</p>
+                        </div>
+
+                        <!-- Pause Button (Small, right side) -->
+                        <button onclick="togglePause()" class="absolute right-6 top-1/2 transform -translate-y-1/2 text-gray-600 bg-white p-3 rounded-full shadow-md hover:bg-gray-100">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            playTurn();
+        }
+
+        function appendAgentBubble(text) {
+            if (!text) return;
+            const container = document.getElementById('conversation-scroll');
+            const bubble = document.createElement('div');
+            bubble.className = "bubble bubble-agent";
+            bubble.innerText = text;
+            container.appendChild(bubble);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function appendUserBubble(text) {
+            const container = document.getElementById('conversation-scroll');
+            const bubble = document.createElement('div');
+            bubble.className = "bubble bubble-user";
+            bubble.innerText = text;
+            container.appendChild(bubble);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function playTurn() {
+            if (currentTurnIndex >= SCENARIO.length) {
+                // End of scenario
+                const container = document.getElementById('conversation-scroll');
+                const exitDiv = document.createElement('div');
+                exitDiv.className = "w-full flex justify-center py-6";
+                // Updated Button to call finishLesson()
+                exitDiv.innerHTML = `
+                    <button onclick="finishLesson()" class="bg-yellow-500 text-white font-bold text-xl py-4 px-8 rounded-full shadow-lg hover:scale-105 transition transform border-4 border-white animate-bounce">
+                        🚖 Descendre du taxi
+                    </button>
+                `;
+                container.appendChild(exitDiv);
+                container.scrollTop = container.scrollHeight;
+                
+                const micBtn = document.getElementById('mic-btn');
+                if (micBtn) micBtn.classList.add('hidden');
+                
+                const micLabel = document.getElementById('mic-label');
+                if (micLabel) micLabel.innerText = "Arrivé !";
+                return;
+            }
+
+            const turn = SCENARIO[currentTurnIndex];
+            hintUsed = false;
+
+            // Update UI
+            document.getElementById('emoji-display').innerText = turn.emoji;
+            const micBtn = document.getElementById('mic-btn');
+            const micIcon = document.getElementById('mic-icon');
+            const micLabel = document.getElementById('mic-label');
+            const timerBar = document.getElementById('timer-bar');
+
+            if (micBtn) {
+                micBtn.className = "mic-btn bg-amber-500 text-white w-20 h-20 rounded-full shadow-xl flex items-center justify-center mb-1 agent-speaking";
+                micBtn.onclick = null;
+            }
+            if (micIcon) micIcon.innerText = "👂"; // User listens
+            if (micLabel) micLabel.innerText = "Écoutez...";
+            if (timerBar) timerBar.classList.add('opacity-0');
+
+            // 1. Agent Phase
+            if (turn.agentText) {
+                appendAgentBubble(turn.agentText);
+                if (turn.agentAudio) {
+                    await playAudio(turn.agentAudio);
+                } else {
+                    await new Promise(r => setTimeout(r, 1500));
+                }
+            } else {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+
+            if (isPaused) return;
+
+            // 2. User Phase
+            if (micBtn) {
+                micBtn.className = "mic-btn bg-blue-500 text-white w-20 h-20 rounded-full shadow-xl flex items-center justify-center mb-1 listening-mode hover:bg-blue-600 cursor-pointer";
+                micBtn.onclick = toggleRecording;
+            }
+            if (micIcon) micIcon.innerText = "👄"; // User speaks
+            if (micLabel) micLabel.innerText = "À vous !";
+            
+            // 3. Start Hint Timer
+            startHintTimer(turn);
+        }
+
+        function startHintTimer(turn) {
+            clearTimeout(hintTimer);
+            hintTimer = setTimeout(() => {
+                if (!isRecording && currentTurnIndex === SCENARIO.indexOf(turn) && !isPaused) {
+                    showHintButton(turn.hintFr);
+                }
+            }, 5000);
+        }
+
+        function showHintButton(hintText) {
+            const container = document.getElementById('conversation-scroll');
+            if (container.lastElementChild.classList.contains('hint-container')) return;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = "hint-container flex flex-col items-center w-full";
+            
+            const btn = document.createElement('button');
+            btn.className = "hint-btn";
+            btn.innerHTML = "💡 Indice";
+            btn.onclick = () => {
+                hintUsed = true;
+                btn.remove();
+                const hintBox = document.createElement('div');
+                hintBox.className = "hint-box";
+                hintBox.innerText = hintText;
+                wrapper.appendChild(hintBox);
+                container.scrollTop = container.scrollHeight;
+            };
+
+            wrapper.appendChild(btn);
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const overlay = document.getElementById('pause-overlay');
+            
+            if (isPaused) {
+                if (overlay) overlay.classList.remove('hidden');
+                if (audioPlayer) audioPlayer.pause();
+                clearTimeout(hintTimer);
+                clearTimeout(recordingTimer);
+                
+                if (isRecording) {
+                    stopRecording();
+                    isRecording = false; 
+                    const micBtn = document.getElementById('mic-btn');
+                    const micIcon = document.getElementById('mic-icon');
+                    const micLabel = document.getElementById('mic-label');
+                    const timerProgress = document.getElementById('timer-progress');
+                    
+                    if (micBtn) {
+                        micBtn.classList.remove('recording');
+                        micBtn.classList.add('listening-mode');
+                    }
+                    if (micIcon) micIcon.innerText = "👄";
+                    if (micLabel) micLabel.innerText = "À vous !";
+                    if (timerProgress) {
+                        timerProgress.style.width = "0%";
+                        timerProgress.style.transition = "none";
+                    }
+                }
+            } else {
+                if (overlay) overlay.classList.add('hidden');
+                const turn = SCENARIO[currentTurnIndex];
+                const micBtn = document.getElementById('mic-btn');
+                if (micBtn && micBtn.classList.contains('listening-mode')) {
+                    startHintTimer(turn);
+                } else {
+                    if (audioPlayer && !audioPlayer.ended) {
+                        audioPlayer.play().catch(e => console.log("Resume failed", e));
+                    }
+                }
+            }
+        }
+
+        function playAudio(url) {
+            return new Promise((resolve) => {
+                if (audioPlayer) {
+                    audioPlayer.pause();
+                    audioPlayer = null;
+                }
+                audioPlayer = new Audio(url);
+                audioPlayer.onended = resolve;
+                audioPlayer.onerror = (e) => {
+                    console.error("Audio Load Error", e);
+                    resolve();
+                };
+                audioPlayer.play().catch(e => {
+                    console.warn("Autoplay blocked", e);
+                    resolve();
+                });
+            });
+        }
+
+        async function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+
+        async function startRecording() {
+            if (isPaused) return;
+
+            clearTimeout(hintTimer);
+            const hintContainer = document.querySelector('.hint-container');
+            if (hintContainer && !hintContainer.querySelector('.hint-box')) {
+                hintContainer.remove();
+            }
+
+            const micBtn = document.getElementById('mic-btn');
+            const micIcon = document.getElementById('mic-icon');
+            const micLabel = document.getElementById('mic-label');
+            const timerBar = document.getElementById('timer-bar');
+            const timerProgress = document.getElementById('timer-progress');
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                let mimeType = 'audio/webm;codecs=opus';
+                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/webm';
+                
+                mediaRecorder = new MediaRecorder(stream, { mimeType });
+                audioChunks = [];
+                isRecording = true;
+
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = processAudio;
+
+                mediaRecorder.start();
+
+                if (micBtn) {
+                    micBtn.classList.remove('listening-mode');
+                    micBtn.classList.add('recording');
+                }
+                if (micIcon) micIcon.innerText = "⏹️";
+                if (micLabel) micLabel.innerText = "Enregistrement...";
+                if (timerBar) timerBar.classList.remove('opacity-0');
+                if (timerProgress) {
+                    timerProgress.style.transition = "width 10s linear";
+                    timerProgress.style.width = "100%";
+                }
+
+                recordingTimer = setTimeout(() => {
+                    if (isRecording) stopRecording();
+                }, 10000);
+
+            } catch (err) {
+                alert("Accès microphone refusé.");
+                console.error(err);
+            }
+        }
+
+        function stopRecording() {
+            if (!mediaRecorder || !isRecording) return;
+            isRecording = false;
+            clearTimeout(recordingTimer);
+            mediaRecorder.stop();
+            
+            const micBtn = document.getElementById('mic-btn');
+            const micIcon = document.getElementById('mic-icon');
+            const micLabel = document.getElementById('mic-label');
+            const timerProgress = document.getElementById('timer-progress');
+
+            if (micBtn) {
+                micBtn.classList.remove('recording');
+                micBtn.classList.add('disabled');
+            }
+            if (micIcon) micIcon.innerText = "⏳";
+            if (micLabel) micLabel.innerText = "Analyse...";
+            if (timerProgress) {
+                timerProgress.style.transition = "none";
+                timerProgress.style.width = "0%";
+            }
+            
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+
+        async function processAudio() {
+            if (isPaused) return; 
+
+            const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = async () => {
+                const base64Audio = reader.result;
+                const turn = SCENARIO[currentTurnIndex];
+                
+                try {
+                    const response = await fetch(CLOVA_API_FUNCTION_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            audioBase64: base64Audio,
+                            languageCode: "Kor"
+                        })
+                    });
+
+                    if (!response.ok) throw new Error("API Error");
+                    const result = await response.json();
+                    const text = result.text || "";
+
+                    evaluateResponse(text, turn);
+
+                } catch (e) {
+                    console.error(e);
+                    evaluateResponse("", turn, true);
+                }
+            };
+        }
+
+        function normalize(str) {
+            return str.replace(/[.,!?'\s]/g, '').trim();
+        }
+
+        async function evaluateResponse(userText, turn, isError = false) {
+            const normalizedUser = normalize(userText);
+            
+            appendUserBubble(userText || "...");
+
+            let points = 0;
+            let matchType = null;
+            
+            if (!isError && userText.length > 0) {
+                // Check exceptions first
+                const exception = turn.answers.find(a => a.type === 'exception' && normalizedUser === normalize(a.text));
+                
+                if (exception) {
+                    points = 0;
+                } else {
+                    // Check Full Matches
+                    const fullMatch = turn.answers.find(a => a.type === 'full' && normalizedUser === normalize(a.text));
+                    if (fullMatch) {
+                        matchType = 'full';
+                        points = 20;
+                    } else {
+                        // Check Partial Matches
+                        const partialMatch = turn.answers.find(a => 
+                            a.type === 'partial' && normalizedUser.includes(normalize(a.text))
+                        );
+                        if (partialMatch) {
+                            matchType = 'partial';
+                            points = 10;
+                        }
+                    }
+                }
+            }
+
+            // Apply Hint Penalty
+            if (hintUsed && points > 0) {
+                points = points / 2; // 20 -> 10, 10 -> 5
+            }
+
+            // Store result for this turn
+            turnResults[currentTurnIndex] = points;
+
+            if (points > 0) {
+                currentScore += points;
+                document.getElementById('score-display').innerText = currentScore;
+                correctSound.triggerAttackRelease("C5", "0.1");
+                
+                // Visual feedback for points
+                const ptsBubble = document.createElement('div');
+                ptsBubble.className = "text-center text-sm font-bold text-green-600 animate-bounce mt-1";
+                ptsBubble.innerText = `+${points}`;
+                document.getElementById('conversation-scroll').lastElementChild.appendChild(ptsBubble);
+
+            } else {
+                wrongSound.triggerAttackRelease("G2", "0.2");
+            }
+
+            // Next Turn
+            await new Promise(r => setTimeout(r, 1000)); 
+
+            if (turn.react) {
+                appendAgentBubble(turn.react.text);
+                await playAudio(turn.react.audio);
+            }
+
+            currentTurnIndex++;
+            setTimeout(playTurn, 1000); 
+        }
+
+    </script>
+</body>
+</html>
